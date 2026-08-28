@@ -32,6 +32,7 @@ hosted = [
 ]
 supabase = ["sqlalchemy[asyncio]>=2.0,<3", "asyncpg>=0.30,<1"]
 dev = ["pytest>=8.4,<9", "pytest-asyncio>=1.1,<2", "ruff>=0.12,<1", "mypy>=1.17,<2"]
+security = ["pyyaml>=6,<7", "pillow>=11,<13", "pypdf>=5,<7"]
 
 [project.scripts]
 awr = "awr.cli:main"
@@ -46,3 +47,10 @@ target-version = "py312"
 [tool.mypy]
 python_version = "3.12"
 strict = true
+
+[[tool.mypy.overrides]]
+module = ["yaml", "yaml.*"]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+pythonpath = ["src", "tests"]

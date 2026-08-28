@@ -75,6 +75,9 @@ CREATE TABLE IF NOT EXISTS artifacts (
     correlation_id TEXT NOT NULL,
     expected_byte_length INTEGER,
     expected_sha256 TEXT,
+    scan_lease_id TEXT,
+    scan_lease_expires_at TEXT,
+    scan_attempt INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL,
     UNIQUE (owner, idempotency_key)
 );
@@ -119,6 +122,18 @@ ON artifact_receipts(artifact_id) WHERE event_type = 'artifact.quarantined';
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_artifact_receipts_rejected
 ON artifact_receipts(artifact_id) WHERE event_type = 'artifact.rejected';
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_artifact_receipts_scan_started
+ON artifact_receipts(artifact_id) WHERE event_type = 'artifact.scan_started';
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_artifact_receipts_scan_passed
+ON artifact_receipts(artifact_id) WHERE event_type = 'artifact.scan_passed';
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_artifact_receipts_promoted
+ON artifact_receipts(artifact_id) WHERE event_type = 'artifact.promoted';
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_artifact_security_receipts_digest
+ON artifact_security_receipts(artifact_id, scanned_sha256);
 """
 
 
@@ -169,6 +184,30 @@ class SQLiteStateStore:
             """
         )
         connection.executescript(_ARTIFACT_SCHEMA)
+        SQLiteStateStore._migrate_artifact_columns(connection)
+
+    @staticmethod
+    def _migrate_artifact_columns(connection: sqlite3.Connection) -> None:
+        tables = {
+            str(row[0])
+            for row in connection.execute(
+                "SELECT name FROM sqlite_master WHERE type='table'"
+            ).fetchall()
+        }
+        if "artifacts" not in tables:
+            return
+        columns = {
+            str(row["name"])
+            for row in connection.execute("PRAGMA table_info(artifacts)").fetchall()
+        }
+        if "scan_lease_id" not in columns:
+            connection.execute("ALTER TABLE artifacts ADD COLUMN scan_lease_id TEXT")
+        if "scan_lease_expires_at" not in columns:
+            connection.execute("ALTER TABLE artifacts ADD COLUMN scan_lease_expires_at TEXT")
+        if "scan_attempt" not in columns:
+            connection.execute(
+                "ALTER TABLE artifacts ADD COLUMN scan_attempt INTEGER NOT NULL DEFAULT 0"
+            )
 
     @contextmanager
     def _connection(self) -> Iterator[sqlite3.Connection]:

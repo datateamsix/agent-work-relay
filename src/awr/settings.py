@@ -6,6 +6,8 @@ from typing import Literal
 
 AuthMode = Literal["oauth", "static"]
 RuntimeEnv = Literal["local", "test", "production"]
+SecurityMode = Literal["enforce"]
+SecurityScannerKind = Literal["clamav", "fake_clean", "fake_eicar"]
 
 AWR_SCOPES = ("awr:plan", "awr:read", "awr:refresh")
 TOOL_SCOPES = {
@@ -60,6 +62,12 @@ class Settings:
     log_level: str = "INFO"
     artifact_root: str = ".awr/artifacts"
     artifact_max_bytes: int = 10 * 1024 * 1024
+    scanner_timeout_seconds: int = 15
+    scan_lease_ttl_seconds: int = 30
+    security_mode: SecurityMode = "enforce"
+    security_scanner: SecurityScannerKind = "clamav"
+    artifact_declare_ttl_seconds: int = 86400
+    artifact_clean_ttl_seconds: int = 604800
 
     extra_jwks: dict[str, object] = field(default_factory=dict, compare=False)
 
@@ -128,6 +136,14 @@ class Settings:
             if hosts
             else ("127.0.0.1", "localhost", "testserver")
         )
+        log_level = _env("AWR_LOG_LEVEL", "INFO") or "INFO"
+        security_mode = (_env("AWR_SECURITY_MODE", "enforce") or "enforce").lower()
+        if security_mode != "enforce":
+            raise SettingsError("AWR_SECURITY_MODE must be enforce.")
+        scanner = (_env("AWR_SECURITY_SCANNER", "clamav") or "clamav").lower()
+        if scanner not in {"clamav", "fake_clean", "fake_eicar"}:
+            raise SettingsError("AWR_SECURITY_SCANNER must be clamav, fake_clean, or fake_eicar.")
+        timeout = _int_env("AWR_SCANNER_TIMEOUT_SECONDS", 15)
         settings = cls(
             env=env,  # type: ignore[arg-type]
             auth_mode=auth_mode,  # type: ignore[arg-type]
@@ -147,9 +163,15 @@ class Settings:
             cursor_api_key=_env("CURSOR_API_KEY"),
             cursor_api_base_url=_env("CURSOR_API_BASE_URL", "https://api.cursor.com")
             or "https://api.cursor.com",
-            log_level=_env("AWR_LOG_LEVEL", "INFO") or "INFO",
+            log_level=log_level,
             artifact_root=_env("AWR_ARTIFACT_ROOT", ".awr/artifacts") or ".awr/artifacts",
             artifact_max_bytes=_int_env("AWR_ARTIFACT_MAX_BYTES", 10 * 1024 * 1024),
+            scanner_timeout_seconds=timeout,
+            scan_lease_ttl_seconds=_int_env("AWR_SCAN_LEASE_TTL_SECONDS", timeout + 15),
+            security_mode="enforce",
+            security_scanner=scanner,  # type: ignore[arg-type]
+            artifact_declare_ttl_seconds=_int_env("AWR_ARTIFACT_DECLARE_TTL", 86400),
+            artifact_clean_ttl_seconds=_int_env("AWR_ARTIFACT_CLEAN_TTL", 604800),
         )
         settings.validate()
         return settings

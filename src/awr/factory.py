@@ -3,6 +3,8 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
+from .artifacts.scan import SecurityScanner, build_scanner
+from .artifacts.security import ArtifactSecurityService
 from .artifacts.service import ArtifactService
 from .executors.base import PlanningExecutor
 from .executors.cursor_cloud import CursorCloudExecutor
@@ -13,6 +15,7 @@ from .storage.artifact_sqlite import SQLiteArtifactMetadataStore
 from .storage.base import StateStore
 from .storage.firestore import FirestoreStateStore
 from .storage.firestore_memory import InMemoryFirestore
+from .storage.quarantine_only import QuarantineOnlyBodyStore
 from .storage.sqlite import SQLiteStateStore
 
 
@@ -48,10 +51,41 @@ def build_artifact_service(
     if limit is None:
         raw = os.getenv("AWR_ARTIFACT_MAX_BYTES")
         limit = int(raw) if raw else 10 * 1024 * 1024
+    inner = LocalArtifactBodyStore(root)
     return ArtifactService(
         SQLiteArtifactMetadataStore(sqlite_path),
-        LocalArtifactBodyStore(root),
+        QuarantineOnlyBodyStore(inner),
         max_bytes=limit,
+    )
+
+
+def build_artifact_security_service(
+    db_path: str | Path | None = None,
+    artifact_root: str | Path | None = None,
+    max_bytes: int | None = None,
+    scanner: SecurityScanner | None = None,
+) -> ArtifactSecurityService:
+    sqlite_path = Path(
+        db_path if db_path is not None else os.getenv("AWR_SQLITE_PATH", ".awr/awr.db")
+    )
+    root = Path(
+        artifact_root
+        if artifact_root is not None
+        else os.getenv("AWR_ARTIFACT_ROOT", ".awr/artifacts")
+    )
+    limit = max_bytes
+    if limit is None:
+        raw = os.getenv("AWR_ARTIFACT_MAX_BYTES")
+        limit = int(raw) if raw else 10 * 1024 * 1024
+    timeout = int(os.getenv("AWR_SCANNER_TIMEOUT_SECONDS", "15"))
+    lease_ttl = int(os.getenv("AWR_SCAN_LEASE_TTL_SECONDS", str(timeout + 15)))
+    kind = os.getenv("AWR_SECURITY_SCANNER", "clamav") or "clamav"
+    return ArtifactSecurityService(
+        SQLiteArtifactMetadataStore(sqlite_path),
+        LocalArtifactBodyStore(root),
+        scanner if scanner is not None else build_scanner(kind, timeout),
+        max_bytes=limit,
+        lease_ttl_seconds=lease_ttl,
     )
 
 

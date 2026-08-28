@@ -108,6 +108,18 @@ class LocalArtifactBodyStore:
             temp_path.unlink(missing_ok=True)
             raise
 
+    def has_clean(self, artifact_id: str, sha256: str) -> bool:
+        return self._clean_path(_require_artifact_id(artifact_id), sha256).is_file()
+
+    def has_quarantine(self, artifact_id: str, sha256: str) -> bool:
+        return self._quarantine_path(_require_artifact_id(artifact_id), sha256).is_file()
+
+    def delete_generation(self, artifact_id: str, sha256: str) -> None:
+        artifact_id = _require_artifact_id(artifact_id)
+        digest = _require_digest(sha256)
+        self._quarantine_path(artifact_id, digest).unlink(missing_ok=True)
+        self._clean_path(artifact_id, digest).unlink(missing_ok=True)
+
     def delete_expired(self, now: datetime, max_age_seconds: float) -> int:
         cutoff = now.astimezone(UTC).timestamp() - max_age_seconds
         removed = 0

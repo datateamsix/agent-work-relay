@@ -119,6 +119,53 @@ class ArtifactMigrationTests(unittest.TestCase):
         self.assertIn("artifacts", names)
         self.assertIn("artifact_receipts", names)
         self.assertIn("artifact_security_receipts", names)
+        columns = {
+            str(row[1])
+            for row in sqlite3.connect(self.db_path).execute("PRAGMA table_info(artifacts)")
+        }
+        self.assertIn("scan_lease_id", columns)
+        self.assertIn("scan_lease_expires_at", columns)
+        self.assertIn("scan_attempt", columns)
+
+    def test_migrates_lease_columns_onto_as01_schema(self) -> None:
+        as01 = """
+        CREATE TABLE artifacts (
+            artifact_id TEXT PRIMARY KEY,
+            idempotency_key TEXT NOT NULL,
+            owner TEXT NOT NULL,
+            original_filename TEXT NOT NULL,
+            declared_media_type TEXT NOT NULL,
+            detected_media_type TEXT,
+            byte_length INTEGER,
+            sha256 TEXT,
+            purpose TEXT NOT NULL,
+            status TEXT NOT NULL,
+            parent_artifact_id TEXT,
+            correlation_id TEXT NOT NULL,
+            expected_byte_length INTEGER,
+            expected_sha256 TEXT,
+            created_at TEXT NOT NULL,
+            UNIQUE (owner, idempotency_key)
+        );
+        """
+        with sqlite3.connect(self.db_path) as connection:
+            connection.executescript(_LEGACY_SCHEMA)
+            connection.executescript(as01)
+        SQLiteStateStore(self.db_path)
+        with sqlite3.connect(self.db_path) as connection:
+            columns = {
+                str(row[1]) for row in connection.execute("PRAGMA table_info(artifacts)").fetchall()
+            }
+            indexes = {
+                str(row[0])
+                for row in connection.execute(
+                    "SELECT name FROM sqlite_master WHERE type='index'"
+                ).fetchall()
+            }
+        self.assertIn("scan_lease_id", columns)
+        self.assertIn("scan_attempt", columns)
+        self.assertIn("idx_artifact_receipts_scan_started", indexes)
+        self.assertIn("idx_artifact_security_receipts_digest", indexes)
 
 
 if __name__ == "__main__":

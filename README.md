@@ -101,7 +101,8 @@ PYTHONPATH=src python -m awr demo --db .awr/demo.db
 PYTHONPATH=src python -m awr ledger --db .awr/demo.db
 ```
 
-Install the hosted MCP extras when you want Streamable HTTP, OAuth, or Firestore:
+Install the hosted MCP extras when you want Streamable HTTP, OAuth, or Firestore.
+Add `--extra security` for Pillow, PyYAML, and pypdf format validators:
 
 ```bash
 uv sync --extra hosted --extra dev
@@ -187,7 +188,7 @@ src/awr/
   settings.py           runtime profile and OAuth resource settings
   auth/                 OAuth 2.1 resource-server verification
   executors/            provider-neutral executor port and Cursor seam
-  artifacts/            local quarantine contracts, ports, and intake
+  artifacts/            quarantine intake, security pipeline, retention
   storage/              SQLite, Firestore, local artifact body store
   transports/           stdio MCP, Streamable HTTP ASGI, optional REST
 tests/
@@ -195,6 +196,7 @@ tests/
   test_golden_prompt_to_plan.py
   test_storage_conformance.py
   test_artifact_service.py
+  test_artifact_security.py
   test_oauth.py
   test_http_app.py
 docs/
@@ -215,9 +217,16 @@ double (`AWR_STORAGE=memory_firestore`) shares the same adapter code for tests.
 Supabase/Postgres remains a later adapter. IndexedDB may later cache browser
 drafts, but it is not an authoritative multi-agent ledger.
 
-Local supporting artifacts (AWR-AS-01) store metadata in SQLite and bytes under
-`AWR_ARTIFACT_ROOT` (`quarantine/` vs `clean/`). This slice does not upload,
-scan, or deliver artifacts.
+Local supporting artifacts store metadata in SQLite and bytes under
+`AWR_ARTIFACT_ROOT` (`quarantine/` vs `clean/`). AWR-AS-02 inspects quarantined
+objects with a fail-closed security pipeline and promotes only clean
+generations. Optional validators live in the `security` extra:
+
+```bash
+uv sync --extra hosted --extra security --extra dev
+```
+
+This slice does not upload artifacts or attach them to Cursor runs.
 
 ## Safety posture
 

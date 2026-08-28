@@ -10,6 +10,7 @@ from .contracts import (
     ArtifactReceipt,
     ArtifactSecurityReceipt,
     ArtifactStatus,
+    ScanClaim,
 )
 
 
@@ -43,9 +44,34 @@ class ArtifactMetadataStore(Protocol):
 
     def update_status(self, artifact_id: str, status: ArtifactStatus) -> None: ...
 
-    def put_security_receipt(self, receipt: ArtifactSecurityReceipt) -> None: ...
+    def put_security_receipt(self, receipt: ArtifactSecurityReceipt) -> ArtifactSecurityReceipt: ...
 
     def list_security_receipts(self, artifact_id: str) -> list[ArtifactSecurityReceipt]: ...
+
+    def get_security_receipt_for_digest(
+        self, artifact_id: str, sha256: str
+    ) -> ArtifactSecurityReceipt | None: ...
+
+    def list_artifacts(self) -> list[Artifact]: ...
+
+    def claim_scan_lease(
+        self,
+        artifact_id: str,
+        *,
+        now: datetime,
+        lease_ttl_seconds: float,
+        lease_id: str,
+    ) -> ScanClaim | None: ...
+
+    def complete_scan(
+        self,
+        artifact_id: str,
+        *,
+        lease_id: str,
+        status: ArtifactStatus,
+        detected_media_type: str | None,
+        now: datetime,
+    ) -> Artifact: ...
 
     def append_receipt(
         self,
@@ -80,6 +106,12 @@ class ArtifactBodyStore(Protocol):
     def promote_clean(self, artifact_id: str, sha256: str) -> None: ...
 
     def open_clean(self, artifact_id: str, sha256: str) -> AbstractContextManager[BinaryIO]: ...
+
+    def has_clean(self, artifact_id: str, sha256: str) -> bool: ...
+
+    def has_quarantine(self, artifact_id: str, sha256: str) -> bool: ...
+
+    def delete_generation(self, artifact_id: str, sha256: str) -> None: ...
 
     def delete_expired(self, now: datetime, max_age_seconds: float) -> int: ...
 

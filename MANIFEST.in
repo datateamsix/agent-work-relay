@@ -1,2 +1,3 @@
 include tests/oauth_helpers.py
+include tests/artifact_fixtures.py
 include scripts/smoke_test.sh

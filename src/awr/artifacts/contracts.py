@@ -51,6 +51,30 @@ _REJECTION_STATUSES = frozenset(
     }
 )
 _TERMINAL_STATUSES = _REJECTION_STATUSES | {ArtifactStatus.RELAYED}
+_ORCHESTRATOR_STATUSES = frozenset({ArtifactStatus.SCANNING, ArtifactStatus.CLEAN})
+
+REASON_TAMPERING = "fingerprint_mismatch"
+REASON_TYPE_MISMATCH = "declared_type_mismatch"
+REASON_TYPE_DISALLOWED = "unknown_or_disallowed_type"
+REASON_POLYGLOT = "polyglot_content"
+REASON_EXTENSION_MISMATCH = "extension_mismatch"
+REASON_MALWARE = "malware_detected"
+REASON_ACTIVE_CONTENT = "active_content"
+REASON_MALFORMED = "malformed"
+REASON_SCANNER_UNAVAILABLE = "scanner_unavailable"
+REASON_SCANNER_TIMEOUT = "scanner_timeout"
+REASON_SIZE = "size_exceeded"
+REASON_EXPIRED_UNCLAIMED = "expired_unclaimed"
+
+CONTROL_AUTHORITY_PRIMARY_MARKDOWN = "primary_markdown_only"
+
+
+def is_rejection(status: ArtifactStatus) -> bool:
+    return status in _REJECTION_STATUSES
+
+
+def is_orchestrator_status(status: ArtifactStatus) -> bool:
+    return status in _ORCHESTRATOR_STATUSES
 
 
 def _assert_never(value: Never) -> Never:
@@ -102,6 +126,9 @@ class Artifact:
     correlation_id: str
     expected_byte_length: int | None = None
     expected_sha256: str | None = None
+    scan_lease_id: str | None = None
+    scan_lease_expires_at: str | None = None
+    scan_attempt: int = 0
 
     def to_dict(self) -> dict[str, Any]:
         payload = asdict(self)
@@ -129,6 +156,17 @@ class ArtifactSecurityReceipt:
         payload["verdict"] = self.verdict.value
         payload["reason_codes"] = list(self.reason_codes)
         return payload
+
+
+@dataclass(frozen=True, slots=True)
+class ScanClaim:
+    artifact_id: str
+    generation_sha256: str
+    lease_id: str
+    expires_at: str
+    scan_attempt: int
+    already_scanned: bool
+    existing_receipt: ArtifactSecurityReceipt | None = None
 
 
 @dataclass(frozen=True, slots=True)

@@ -30,7 +30,7 @@ jobs:
         with:
           python-version: "3.12"
       - name: Install hosted extras
-        run: uv sync --extra hosted --extra dev
+        run: uv sync --extra hosted --extra security --extra dev
       - name: Format and lint
         run: |
           uv run ruff format --check src tests

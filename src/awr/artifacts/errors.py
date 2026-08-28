@@ -15,3 +15,7 @@ class ArtifactImmutabilityError(ArtifactError):
 
 class ArtifactAccessError(ArtifactError):
     """A body was requested from a storage area that does not contain it."""
+
+
+class ArtifactConflictError(ArtifactError):
+    """Another worker holds a live scan lease for this artifact."""
