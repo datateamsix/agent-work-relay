@@ -8,26 +8,17 @@ Typed, auditable work-order handoffs between planning agents and coding agents.
 Markdown files, and transferring files from local download folders into
 development projects. Madness!*
 
-A common AI-assisted engineering workflow starts in one tool and finishes in
-another:
+You shape a feature in ChatGPT or Claude. Then the relay race begins: copy the
+prompt, switch tabs, paste it into Cursor, download the spec, hunt it down in
+Downloads, move it into the project, copy the response back, and do it all
+again.
 
-1. Develop a feature idea, architecture decision, or refinement with ChatGPT or
-   Claude.
-2. Turn the conversation into a Markdown specification or implementation
-   prompt.
-3. Download or copy the Markdown, switch tabs, open Cursor or Claude Code, and
-   paste it into the correct repository session.
-4. Wait for the coding agent to review the request and produce a plan.
-5. Copy its plan, questions, branch details, or completion summary back into the
-   planning conversation.
-6. Repeat the same tab-switching and copy/paste loop for every clarification,
-   refinement, review, and approval.
+**Brilliant AI tools, connected by your clipboard. Not exactly the autonomous
+future we were promised.**
 
-The human is doing integration work that software should handle. Besides the
-friction, this manual shuttle makes it easy to send an outdated prompt, lose
-context, route work to the wrong repository or session, duplicate a run, or
-forget exactly what was sent and received. There is no dependable receipt chain
-or general ledger for the work moving between agents.
+Every trip creates another chance to lose context, grab the wrong file,
+duplicate work, or forget what was sent. EWB handles the handoff and keeps the
+receipts. You make the decisions; the broker does the courier work.
 
 EWB removes the human from the transport loop while preserving human review and
 approval. The target prompt-to-plan handoff is intentionally small and
