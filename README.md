@@ -120,6 +120,11 @@ uv run ewb mcp
 See [docs/LIVE_PROTOTYPE.md](docs/LIVE_PROTOTYPE.md) for the golden-test
 runbook and the boundary between the local and hosted profiles.
 
+Cursor engineers should use
+[docs/CURSOR_PRODUCT_SUMMARY_AND_CLOUD_RUN_BUILD.md](docs/CURSOR_PRODUCT_SUMMARY_AND_CLOUD_RUN_BUILD.md)
+for the product context, hosted architecture, GCP target, acceptance criteria,
+and copy-ready next-build prompt.
+
 ## MCP tool
 
 The MCP server exposes four tools:
@@ -159,6 +164,7 @@ tests/
   test_golden_prompt_to_plan.py
 docs/
   ARCHITECTURE.md
+  CURSOR_PRODUCT_SUMMARY_AND_CLOUD_RUN_BUILD.md
   EWB-GT-001.md
   LIVE_PROTOTYPE.md
 ```
