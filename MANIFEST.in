@@ -1,0 +1,2 @@
+include tests/oauth_helpers.py
+include scripts/smoke_test.sh

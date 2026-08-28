@@ -129,5 +129,80 @@ stdio process. The hosted profile therefore needs:
 - A scheduler or task queue to refresh active Cursor runs
 
 Do not deploy the SQLite profile to an ephemeral serverless filesystem and call
-it durable. The hosted profile is the next deployment milestone after the live
-Cursor round trip passes.
+it durable. The Streamable HTTP MCP resource server, OAuth verification, and
+Firestore adapter are implemented in this repository. Live Cloud Run proof still
+requires a human-authenticated GCP login, an authorization server, and a Cursor
+API key in Secret Manager.
+
+## 5. Run the hosted MCP server locally
+
+```bash
+uv sync --extra hosted --extra dev
+export AWR_ENV=local
+export AWR_AUTH_MODE=static
+export AWR_STATIC_TOKEN=local-dev-token
+export AWR_STORAGE=memory_firestore
+export AWR_PUBLIC_BASE_URL=http://127.0.0.1:43145
+uv run awr serve --host 127.0.0.1 --port 43145
+```
+
+In another shell:
+
+```bash
+./scripts/smoke_test.sh http://127.0.0.1:43145
+```
+
+`/healthz` is public. `/mcp` must return `401` with a `WWW-Authenticate`
+challenge when no bearer token is present.
+
+## 6. GCP setup and Cloud Run deploy
+
+This step requires a human-authenticated `gcloud` session as a
+`modelready-m3` owner. The agent must not receive the Cursor API key.
+
+```bash
+gcloud auth login
+./deploy/gcp_setup.sh
+gcloud secrets versions add awr-cursor-api-key --data-file=-
+export AWR_OAUTH_ISSUER=https://your-tenant.auth0.com/
+export AWR_OAUTH_AUDIENCE=https://YOUR-SERVICE-URL/mcp
+export AWR_PUBLIC_BASE_URL=https://YOUR-SERVICE-URL
+./deploy/gcp_deploy.sh
+gcloud firestore indexes composite create --project modelready-m3 || true
+# Prefer:
+gcloud firestore indexes composite import --source deploy/firestore.indexes.json
+```
+
+Runtime identity: `awr-runtime@modelready-m3.iam.gserviceaccount.com`.
+
+Do not grant Vertex AI, BigQuery, or Cloud Storage roles. Do not deploy into
+the PreM3 Cloud Run service.
+
+Rollback: `gcloud run services update-traffic agent-work-relay --to-revisions PREVIOUS=100`.
+
+## 7. Connect ChatGPT
+
+1. Complete the Auth0 (or WorkOS) setup in `docs/AUTH.md`.
+2. In ChatGPT, add a remote MCP connector pointing at `https://<service>/mcp`.
+3. Complete OAuth linking. ChatGPT must use authorization-code + PKCE S256.
+4. Submit `examples/AWR-GT-001.md` through `submit_prompt_for_planning`.
+5. Call `refresh_planning` until a `PlanPacket` is returned.
+6. Confirm `get_work_order_timeline` contains:
+
+```text
+work_order.accepted
+work_order.routed
+executor.acknowledged
+plan.received
+plan.available
+```
+
+Replay the same idempotency key. AWR must return the original work order and
+must not create a second Cursor agent.
+
+## Known hosted limitations
+
+- Polling is caller-driven (`refresh_planning`). Cloud Tasks comes later.
+- Static tokens are a local-only escape hatch.
+- Live GCP deploy still needs a human-authenticated `gcloud` login, an Auth0
+  tenant, and a Secret Manager value that never enters the agent conversation.

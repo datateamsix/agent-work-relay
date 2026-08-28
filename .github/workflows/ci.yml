@@ -20,3 +20,24 @@ jobs:
         run: PYTHONPATH=src python -m unittest discover -s tests -v
       - name: Compile package
         run: python -m compileall -q src tests
+
+  hosted:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install hosted extras
+        run: uv sync --extra hosted --extra dev
+      - name: Format and lint
+        run: |
+          uv run ruff format --check src tests
+          uv run ruff check src tests
+      - name: Typecheck
+        run: uv run mypy --strict src
+      - name: Tests
+        run: uv run pytest -q
+      - name: Package build
+        run: uv build

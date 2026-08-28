@@ -52,7 +52,10 @@ def _parser() -> argparse.ArgumentParser:
     ledger.add_argument("--db", type=Path, default=Path(".awr/awr.db"))
     ledger.add_argument("--work-order-id")
 
-    subparsers.add_parser("mcp", help="Run the MCP v2 server")
+    subparsers.add_parser("mcp", help="Run the MCP v2 stdio server")
+    serve = subparsers.add_parser("serve", help="Run the hosted Streamable HTTP MCP application")
+    serve.add_argument("--host", default="0.0.0.0")
+    serve.add_argument("--port", type=int, default=0)
     return parser
 
 
@@ -129,3 +132,15 @@ def main(argv: Sequence[str] | None = None) -> None:
         from .transports.mcp_server import run
 
         run()
+        return
+
+    if args.command == "serve":
+        import os
+
+        import uvicorn
+
+        from .transports.asgi import create_app
+
+        port = args.port or int(os.getenv("PORT", "8080"))
+        uvicorn.run(create_app, factory=True, host=args.host, port=port)
+        return

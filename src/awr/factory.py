@@ -7,27 +7,45 @@ from .executors.base import PlanningExecutor
 from .executors.cursor_cloud import CursorCloudExecutor
 from .executors.recording_cursor import RecordingCursorExecutor
 from .service import BrokerService
+from .storage.base import StateStore
 from .storage.sqlite import SQLiteStateStore
 
 
 def build_service(
     db_path: str | Path | None = None,
     executor: PlanningExecutor | None = None,
+    store: StateStore | None = None,
 ) -> BrokerService:
-    storage = os.getenv("AWR_STORAGE", "sqlite")
-    if storage != "sqlite":
-        raise NotImplementedError(f"Storage adapter {storage!r} is not enabled in AWR-GT-001.")
-    configured_path = (
-        db_path if db_path is not None else os.getenv("AWR_SQLITE_PATH", ".awr/awr.db")
-    )
-    resolved_path = Path(configured_path)
+    selected_store = store or _build_store(db_path)
     selected_executor = executor or _build_executor()
     return BrokerService(
-        store=SQLiteStateStore(resolved_path),
+        store=selected_store,
         executor=selected_executor,
         default_repository_url=os.getenv("AWR_REPOSITORY_URL") or None,
         default_base_ref=os.getenv("AWR_BASE_REF", "main"),
     )
+
+
+def _build_store(db_path: str | Path | None) -> StateStore:
+    storage = os.getenv("AWR_STORAGE", "sqlite")
+    if storage == "sqlite":
+        configured_path = (
+            db_path if db_path is not None else os.getenv("AWR_SQLITE_PATH", ".awr/awr.db")
+        )
+        return SQLiteStateStore(Path(configured_path))
+    if storage == "memory_firestore":
+        from .storage.firestore import FirestoreStateStore
+        from .storage.firestore_memory import InMemoryFirestore
+
+        return FirestoreStateStore(InMemoryFirestore())
+    if storage == "firestore":
+        from .storage.firestore import FirestoreStateStore
+
+        return FirestoreStateStore.from_env(
+            project=os.getenv("GOOGLE_CLOUD_PROJECT") or os.getenv("AWR_GCP_PROJECT"),
+            database=os.getenv("FIRESTORE_DATABASE", "(default)"),
+        )
+    raise NotImplementedError(f"Storage adapter {storage!r} is not enabled.")
 
 
 def _build_executor() -> PlanningExecutor:

@@ -101,7 +101,18 @@ PYTHONPATH=src python -m awr demo --db .awr/demo.db
 PYTHONPATH=src python -m awr ledger --db .awr/demo.db
 ```
 
-Install the MCP transport when you are ready to connect an MCP host:
+Install the hosted MCP extras when you want Streamable HTTP, OAuth, or Firestore:
+
+```bash
+uv sync --extra hosted --extra dev
+export AWR_AUTH_MODE=static AWR_STATIC_TOKEN=local-dev-token AWR_STORAGE=memory_firestore
+uv run awr serve --host 127.0.0.1 --port 43145
+```
+
+`GET /healthz` is public. `POST /mcp` requires a bearer token. Static tokens
+are for local tests only and cannot be enabled when `AWR_ENV=production`.
+
+Install stdio MCP when you are connecting a local MCP host:
 
 ```bash
 uv sync --extra mcp --extra dev
@@ -127,7 +138,11 @@ uv run awr mcp
 ```
 
 See [docs/LIVE_PROTOTYPE.md](docs/LIVE_PROTOTYPE.md) for the golden-test
-runbook and the boundary between the local and hosted profiles.
+runbook, Cloud Run deployment, ChatGPT connection, and rollback instructions.
+
+Authorization-server selection is documented in [docs/AUTH.md](docs/AUTH.md).
+The PreM3 Clerk setup is not used; AWR is an OAuth resource server in front of
+a managed authorization server.
 
 Cursor engineers should use
 [docs/CURSOR_PRODUCT_SUMMARY_AND_CLOUD_RUN_BUILD.md](docs/CURSOR_PRODUCT_SUMMARY_AND_CLOUD_RUN_BUILD.md)
@@ -169,14 +184,20 @@ src/awr/
   decorators.py         strict @awr command grammar
   service.py            deterministic orchestration
   wrappers.py           versioned executor envelopes
+  settings.py           runtime profile and OAuth resource settings
+  auth/                 OAuth 2.1 resource-server verification
   executors/            provider-neutral executor port and Cursor seam
-  storage/              storage port, SQLite default, cloud placeholders
-  transports/           MCP v2 and optional HTTP surfaces
+  storage/              SQLite, Firestore, and in-memory Firestore double
+  transports/           stdio MCP, Streamable HTTP ASGI, optional REST
 tests/
   test_decorators.py
   test_golden_prompt_to_plan.py
+  test_storage_conformance.py
+  test_oauth.py
+  test_http_app.py
 docs/
   ARCHITECTURE.md
+  AUTH.md
   CURSOR_PRODUCT_SUMMARY_AND_CLOUD_RUN_BUILD.md
   CURSOR_SECURE_ARTIFACT_RELAY_BUILD_PROMPTS.md
   AWR-GT-001.md
@@ -186,8 +207,11 @@ docs/
 ## Storage model
 
 SQLite is the local authoritative default. `StateStore` is the portability
-boundary for Firestore and Supabase/Postgres adapters. IndexedDB may later cache
-browser drafts, but it is not an authoritative multi-agent ledger.
+boundary. The hosted profile uses Firestore collections `awr_work_orders`,
+`awr_work_orders/{id}/ledger`, and `awr_idempotency`. An in-memory Firestore
+double (`AWR_STORAGE=memory_firestore`) shares the same adapter code for tests.
+Supabase/Postgres remains a later adapter. IndexedDB may later cache browser
+drafts, but it is not an authoritative multi-agent ledger.
 
 ## Safety posture
 

@@ -21,6 +21,8 @@ from .executors.base import PlanningExecutor
 from .storage.base import StateStore, WorkOrderSession
 from .wrappers import WrappedPrompt, wrap_prompt
 
+MAX_MARKDOWN_BYTES = 512 * 1024
+
 
 class WorkOrderValidationError(ValueError):
     """A work order cannot be accepted without violating a broker invariant."""
@@ -50,6 +52,7 @@ class BrokerService:
         base_ref: str | None = None,
         idempotency_key: str | None = None,
     ) -> SubmissionReceipt:
+        self._reject_oversized_markdown(markdown)
         directive = parse_directive(markdown)
         parent = self._resolve_parent(directive.parent_work_order_id)
         resolved_repository_url, resolved_base_ref = self._resolve_repository(
@@ -379,6 +382,11 @@ class BrokerService:
         if not resolved_base_ref.strip() or any(char.isspace() for char in resolved_base_ref):
             raise WorkOrderValidationError("base_ref must be a non-empty Git reference.")
         return self._normalize_repository(configured_repository), resolved_base_ref
+
+    @staticmethod
+    def _reject_oversized_markdown(markdown: str) -> None:
+        if len(markdown.encode("utf-8")) > MAX_MARKDOWN_BYTES:
+            raise WorkOrderValidationError("Markdown payload exceeds the 512 KiB limit.")
 
     @staticmethod
     def _normalize_repository(repository_url: str) -> str:

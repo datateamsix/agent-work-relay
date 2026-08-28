@@ -1,0 +1,45 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "ledger",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "sequence", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "awr_work_orders",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "created_at", "order": "ASCENDING" }
+      ]
+    }
+  ],
+  "fieldOverrides": [
+    {
+      "collectionGroup": "awr_work_orders",
+      "fieldPath": "markdown",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "awr_work_orders",
+      "fieldPath": "content_sha256",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "awr_work_orders",
+      "fieldPath": "wrapper_sha256",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "awr_work_orders",
+      "fieldPath": "idempotency_key",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "ledger",
+      "fieldPath": "payload",
+      "indexes": []
+    }
+  ]
+}

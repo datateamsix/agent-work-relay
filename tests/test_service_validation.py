@@ -62,6 +62,15 @@ class ServiceValidationTests(unittest.TestCase):
         expected_agent_id = acknowledgement["payload"]["executor_agent_id"]
         self.assertEqual(self.cursor.dispatches[1].existing_agent_id, expected_agent_id)
 
+    def test_oversized_markdown_is_rejected(self) -> None:
+        with self.assertRaisesRegex(WorkOrderValidationError, "512 KiB"):
+            self.service.submit_prompt_for_planning(
+                markdown="@awr feature.plan\n\n" + ("x" * (512 * 1024)),
+                sender="chatgpt:planner",
+                recipient="cursor:backend",
+                repository_url=REPOSITORY,
+            )
+
     def test_idempotency_key_cannot_be_rebound(self) -> None:
         self.service.submit_prompt_for_planning(
             markdown=FEATURE,
