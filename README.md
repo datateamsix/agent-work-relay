@@ -2,7 +2,7 @@
 
 Typed, auditable work-order handoffs between planning agents and coding agents.
 
-## The problem: the human becomes the message bus
+## The problem: Humans are the message couriers
 
 A common AI-assisted engineering workflow starts in one tool and finishes in
 another:
