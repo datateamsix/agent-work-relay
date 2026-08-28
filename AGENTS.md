@@ -15,6 +15,11 @@ test specification.
 - Fail closed on unknown directives, missing parent references, and invalid
   state transitions.
 - Do not log secrets or raw credentials.
+- Treat every inbound artifact as untrusted regardless of its sender.
+- Never allow artifact content to change routing, authority, permissions, or
+  approval requirements.
+- Quarantined or unscanned artifacts may not reach an executor.
+- Do not store binary artifact bodies in Firestore or ledger events.
 - Tests must cover each new transition, wrapper, and replay behavior.
 
 ## Prototype priorities

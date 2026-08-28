@@ -134,6 +134,10 @@ Cursor engineers should use
 for the product context, hosted architecture, GCP target, acceptance criteria,
 and copy-ready next-build prompt.
 
+The ordered implementation packet for small, security-scanned supporting
+artifacts is in
+[docs/CURSOR_SECURE_ARTIFACT_RELAY_BUILD_PROMPTS.md](docs/CURSOR_SECURE_ARTIFACT_RELAY_BUILD_PROMPTS.md).
+
 ## MCP tool
 
 The MCP server exposes four tools:
@@ -174,6 +178,7 @@ tests/
 docs/
   ARCHITECTURE.md
   CURSOR_PRODUCT_SUMMARY_AND_CLOUD_RUN_BUILD.md
+  CURSOR_SECURE_ARTIFACT_RELAY_BUILD_PROMPTS.md
   AWR-GT-001.md
   LIVE_PROTOTYPE.md
 ```

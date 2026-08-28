@@ -119,7 +119,7 @@ Cursor Cloud adapter:
 - retrieves and fingerprints the terminal planning result.
 
 The current suite passes formatting, linting, strict type checking, package
-build, and 15 automated tests.
+build, and 22 automated tests.
 
 ## What is not built yet
 
