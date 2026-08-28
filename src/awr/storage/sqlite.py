@@ -59,6 +59,68 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_ledger_unique_plan_available
 ON ledger(work_order_id) WHERE event_type = 'plan.available';
 """
 
+_ARTIFACT_SCHEMA = """
+CREATE TABLE IF NOT EXISTS artifacts (
+    artifact_id TEXT PRIMARY KEY,
+    idempotency_key TEXT NOT NULL,
+    owner TEXT NOT NULL,
+    original_filename TEXT NOT NULL,
+    declared_media_type TEXT NOT NULL,
+    detected_media_type TEXT,
+    byte_length INTEGER,
+    sha256 TEXT,
+    purpose TEXT NOT NULL,
+    status TEXT NOT NULL,
+    parent_artifact_id TEXT,
+    correlation_id TEXT NOT NULL,
+    expected_byte_length INTEGER,
+    expected_sha256 TEXT,
+    created_at TEXT NOT NULL,
+    UNIQUE (owner, idempotency_key)
+);
+
+CREATE TABLE IF NOT EXISTS artifact_security_receipts (
+    receipt_id TEXT PRIMARY KEY,
+    artifact_id TEXT NOT NULL,
+    scanner_id TEXT NOT NULL,
+    scanner_version TEXT NOT NULL,
+    signature_version TEXT NOT NULL,
+    verdict TEXT NOT NULL,
+    reason_codes_json TEXT NOT NULL,
+    scanned_sha256 TEXT NOT NULL,
+    started_at TEXT NOT NULL,
+    completed_at TEXT NOT NULL,
+    diagnostics_json TEXT NOT NULL,
+    FOREIGN KEY (artifact_id) REFERENCES artifacts(artifact_id)
+);
+
+CREATE TABLE IF NOT EXISTS artifact_receipts (
+    sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+    event_id TEXT NOT NULL UNIQUE,
+    artifact_id TEXT NOT NULL,
+    work_order_id TEXT,
+    correlation_id TEXT NOT NULL,
+    event_type TEXT NOT NULL,
+    actor TEXT NOT NULL,
+    counterparty TEXT NOT NULL,
+    payload_json TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    FOREIGN KEY (artifact_id) REFERENCES artifacts(artifact_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_artifact_receipts_artifact
+ON artifact_receipts(artifact_id, sequence);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_artifact_receipts_declared
+ON artifact_receipts(artifact_id) WHERE event_type = 'artifact.declared';
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_artifact_receipts_quarantined
+ON artifact_receipts(artifact_id) WHERE event_type = 'artifact.quarantined';
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_artifact_receipts_rejected
+ON artifact_receipts(artifact_id) WHERE event_type = 'artifact.rejected';
+"""
+
 
 class SQLiteStateStore:
     def __init__(self, path: str | Path) -> None:
@@ -106,6 +168,7 @@ class SQLiteStateStore:
             ON ledger(work_order_id) WHERE event_type = 'plan.available'
             """
         )
+        connection.executescript(_ARTIFACT_SCHEMA)
 
     @contextmanager
     def _connection(self) -> Iterator[sqlite3.Connection]:

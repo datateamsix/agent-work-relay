@@ -3,11 +3,16 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
+from .artifacts.service import ArtifactService
 from .executors.base import PlanningExecutor
 from .executors.cursor_cloud import CursorCloudExecutor
 from .executors.recording_cursor import RecordingCursorExecutor
 from .service import BrokerService
+from .storage.artifact_fs import LocalArtifactBodyStore
+from .storage.artifact_sqlite import SQLiteArtifactMetadataStore
 from .storage.base import StateStore
+from .storage.firestore import FirestoreStateStore
+from .storage.firestore_memory import InMemoryFirestore
 from .storage.sqlite import SQLiteStateStore
 
 
@@ -26,6 +31,30 @@ def build_service(
     )
 
 
+def build_artifact_service(
+    db_path: str | Path | None = None,
+    artifact_root: str | Path | None = None,
+    max_bytes: int | None = None,
+) -> ArtifactService:
+    sqlite_path = Path(
+        db_path if db_path is not None else os.getenv("AWR_SQLITE_PATH", ".awr/awr.db")
+    )
+    root = Path(
+        artifact_root
+        if artifact_root is not None
+        else os.getenv("AWR_ARTIFACT_ROOT", ".awr/artifacts")
+    )
+    limit = max_bytes
+    if limit is None:
+        raw = os.getenv("AWR_ARTIFACT_MAX_BYTES")
+        limit = int(raw) if raw else 10 * 1024 * 1024
+    return ArtifactService(
+        SQLiteArtifactMetadataStore(sqlite_path),
+        LocalArtifactBodyStore(root),
+        max_bytes=limit,
+    )
+
+
 def _build_store(db_path: str | Path | None) -> StateStore:
     storage = os.getenv("AWR_STORAGE", "sqlite")
     if storage == "sqlite":
@@ -34,13 +63,8 @@ def _build_store(db_path: str | Path | None) -> StateStore:
         )
         return SQLiteStateStore(Path(configured_path))
     if storage == "memory_firestore":
-        from .storage.firestore import FirestoreStateStore
-        from .storage.firestore_memory import InMemoryFirestore
-
         return FirestoreStateStore(InMemoryFirestore())
     if storage == "firestore":
-        from .storage.firestore import FirestoreStateStore
-
         return FirestoreStateStore.from_env(
             project=os.getenv("GOOGLE_CLOUD_PROJECT") or os.getenv("AWR_GCP_PROJECT"),
             database=os.getenv("FIRESTORE_DATABASE", "(default)"),

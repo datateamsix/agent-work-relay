@@ -25,7 +25,8 @@ flowchart TD
 | Planner protocol | MCP v2 | REST/webhook, CLI |
 | State and ledger | SQLite | Firestore, Supabase/Postgres |
 | Executor | Recording Cursor adapter | Cursor Cloud, Claude Agent SDK |
-| Artifact body | Inline Markdown | Git blob, object storage |
+| Artifact body | Local quarantine/clean dirs | GCS object storage |
+| Artifact metadata | SQLite `artifacts` tables | Firestore (later) |
 | Notification | Ledger query | Slack app/webhooks |
 
 ## Domain rules
@@ -36,6 +37,14 @@ duplicate those decisions.
 
 The ledger is an ordered event stream. A `work_orders` row is a materialized
 snapshot for efficient reads; ledger entries are the audit record.
+
+Supporting artifacts are pre-work-order objects. Their metadata lives in SQLite
+`artifacts` rows. Binary bodies are stored outside SQLite under
+`AWR_ARTIFACT_ROOT` in separate `quarantine/` and `clean/` trees. Artifact
+receipts use `artifact_receipts`, not the work-order `ledger`, because artifacts
+exist before a work-order ID. `work_order_id` on artifact receipts stays NULL
+until a later bundle slice correlates them. Bodies are never written to
+Firestore, SQLite BLOBs, or ledger JSON.
 
 ## Initial states
 

@@ -28,6 +28,16 @@ def _env(name: str, default: str | None = None) -> str | None:
     return stripped or None
 
 
+def _int_env(name: str, default: int) -> int:
+    raw = _env(name)
+    if raw is None:
+        return default
+    try:
+        return int(raw)
+    except ValueError as exc:
+        raise SettingsError(f"{name} must be an integer.") from exc
+
+
 @dataclass(frozen=True, slots=True)
 class Settings:
     env: RuntimeEnv = "local"
@@ -48,6 +58,8 @@ class Settings:
     cursor_api_key: str | None = None
     cursor_api_base_url: str = "https://api.cursor.com"
     log_level: str = "INFO"
+    artifact_root: str = ".awr/artifacts"
+    artifact_max_bytes: int = 10 * 1024 * 1024
 
     extra_jwks: dict[str, object] = field(default_factory=dict, compare=False)
 
@@ -136,6 +148,8 @@ class Settings:
             cursor_api_base_url=_env("CURSOR_API_BASE_URL", "https://api.cursor.com")
             or "https://api.cursor.com",
             log_level=_env("AWR_LOG_LEVEL", "INFO") or "INFO",
+            artifact_root=_env("AWR_ARTIFACT_ROOT", ".awr/artifacts") or ".awr/artifacts",
+            artifact_max_bytes=_int_env("AWR_ARTIFACT_MAX_BYTES", 10 * 1024 * 1024),
         )
         settings.validate()
         return settings

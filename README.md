@@ -187,12 +187,14 @@ src/awr/
   settings.py           runtime profile and OAuth resource settings
   auth/                 OAuth 2.1 resource-server verification
   executors/            provider-neutral executor port and Cursor seam
-  storage/              SQLite, Firestore, and in-memory Firestore double
+  artifacts/            local quarantine contracts, ports, and intake
+  storage/              SQLite, Firestore, local artifact body store
   transports/           stdio MCP, Streamable HTTP ASGI, optional REST
 tests/
   test_decorators.py
   test_golden_prompt_to_plan.py
   test_storage_conformance.py
+  test_artifact_service.py
   test_oauth.py
   test_http_app.py
 docs/
@@ -212,6 +214,10 @@ boundary. The hosted profile uses Firestore collections `awr_work_orders`,
 double (`AWR_STORAGE=memory_firestore`) shares the same adapter code for tests.
 Supabase/Postgres remains a later adapter. IndexedDB may later cache browser
 drafts, but it is not an authoritative multi-agent ledger.
+
+Local supporting artifacts (AWR-AS-01) store metadata in SQLite and bytes under
+`AWR_ARTIFACT_ROOT` (`quarantine/` vs `clean/`). This slice does not upload,
+scan, or deliver artifacts.
 
 ## Safety posture
 
