@@ -26,6 +26,8 @@ Every trip creates another chance to lose context, grab the wrong file,
 duplicate work, or forget what was sent. AWR handles the handoff and keeps the
 receipts. You make the decisions; the broker does the courier work.
 
+## The solution architecture
+
 AWR removes the human from the transport loop while preserving human review and
 approval. The target prompt-to-plan handoff is intentionally small and
 explicit:
