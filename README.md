@@ -42,9 +42,9 @@ sequenceDiagram
     B-->>P: Plan available for review
 ```
 
-The current scaffold implements the sequence through agent/run acknowledgement.
-Structured plan capture and return to the originating planner is the next
-milestone.
+The scaffold implements this complete sequence with its recording Cursor
+adapter. Set `EWB_EXECUTOR=cursor_cloud` and provide a Cursor API key to run the
+same contracts against a real repository.
 
 ## What EWB changes
 
@@ -60,20 +60,26 @@ provides the reliable, inspectable path between them.
 
 ## Prototype boundary
 
-The first vertical slice is `EWB-GT-001`: prompt to Cursor planning receipt.
+The first vertical slice is `EWB-GT-001`: ChatGPT prompt to reviewable Cursor
+plan.
 
 1. A planning agent creates Markdown beginning with `@ewb feature.plan` or
    `@ewb refinement.plan parent=<work-order-id>`.
 2. The `submit_prompt_for_planning` MCP tool sends it to EWB.
-3. EWB stores the immutable payload hash and an acceptance receipt in SQLite.
-4. EWB applies a versioned `PLAN_ONLY` wrapper and routes the packet to a
-   Cursor executor adapter.
-5. The adapter acknowledges the run; EWB records that receipt in the ledger.
-6. Replaying the same idempotency key returns the original work order without
-   launching the executor twice.
+3. EWB binds the repository and base reference, stores the immutable payload
+   hash, and returns an acceptance receipt.
+4. EWB applies a versioned `PLAN_ONLY` wrapper and creates a Cursor run in
+   native Plan mode with branch mutation and automatic PR creation disabled.
+5. The adapter returns durable agent and run IDs; EWB records the receipt.
+6. `refresh_planning` reads the run until Cursor returns its final plan.
+7. EWB fingerprints the plan, records `plan.received` and `plan.available`, and
+   returns the `PlanPacket` to the originating planner.
+8. Replaying the same idempotency key or refreshing a finished run does not
+   duplicate the agent, plan, or ledger receipts.
 
-The included `RecordingCursorExecutor` makes this flow executable without
-external credentials. The real Cursor Cloud adapter is the next integration.
+The included `RecordingCursorExecutor` makes the full flow executable without
+external credentials. The real Cursor Cloud Agents API v1 adapter uses the same
+domain and ledger contracts.
 
 ## Quick start
 
@@ -93,13 +99,45 @@ uv sync --extra mcp --extra dev
 uv run ewb mcp
 ```
 
+### Run against Cursor Cloud
+
+Create a Cursor API key, make sure Cursor can access the target GitHub
+repository, and export the runtime configuration. Keep the key in your shell or
+secret manager—never commit it.
+
+```bash
+export EWB_EXECUTOR=cursor_cloud
+export EWB_STORAGE=sqlite
+export EWB_SQLITE_PATH=.ewb/ewb.db
+export EWB_REPOSITORY_URL=https://github.com/your-org/your-repo
+export EWB_BASE_REF=main
+export CURSOR_API_KEY=your-key
+
+uv sync --extra mcp --extra cursor --extra dev
+uv run ewb mcp
+```
+
+See [docs/LIVE_PROTOTYPE.md](docs/LIVE_PROTOTYPE.md) for the golden-test
+runbook and the boundary between the local and hosted profiles.
+
 ## MCP tool
+
+The MCP server exposes four tools:
+
+- `submit_prompt_for_planning` validates, fingerprints, stores, and dispatches
+  the work order;
+- `refresh_planning` reads Cursor run state and captures a terminal plan;
+- `get_plan` returns the immutable, fingerprinted `PlanPacket`;
+- `get_work_order_timeline` returns the complete ordered receipt ledger.
 
 `submit_prompt_for_planning` accepts:
 
 - `markdown`: the complete decorated Markdown prompt/spec;
 - `sender`: a stable planner identity such as `chatgpt:product-planner`;
 - `recipient`: a configured executor identity such as `cursor:backend`;
+- `repository_url`: an HTTPS GitHub repository URL, unless configured as the
+  broker default;
+- `base_ref`: the starting branch or commit, defaulting to `main`;
 - `idempotency_key`: optional caller-supplied replay key.
 
 It returns an acceptance receipt containing the work-order ID, content hash,
@@ -122,6 +160,7 @@ tests/
 docs/
   ARCHITECTURE.md
   EWB-GT-001.md
+  LIVE_PROTOTYPE.md
 ```
 
 ## Storage model

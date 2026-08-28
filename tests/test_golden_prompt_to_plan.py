@@ -16,6 +16,7 @@ PROMPT = """@ewb feature.plan
 
 Produce an implementation plan. Do not edit files.
 """
+REPOSITORY = "https://github.com/example/project"
 
 
 class GoldenPromptToPlanTests(unittest.TestCase):
@@ -34,6 +35,8 @@ class GoldenPromptToPlanTests(unittest.TestCase):
             markdown=PROMPT,
             sender="chatgpt:planner",
             recipient="cursor:backend",
+            repository_url=REPOSITORY,
+            base_ref="main",
             idempotency_key="golden-001",
         )
 
@@ -43,6 +46,8 @@ class GoldenPromptToPlanTests(unittest.TestCase):
         self.assertEqual(len(self.cursor.dispatches), 1)
         dispatch = self.cursor.dispatches[0]
         self.assertEqual(dispatch.mode, "PLAN_ONLY")
+        self.assertEqual(dispatch.repository_url, REPOSITORY)
+        self.assertEqual(dispatch.base_ref, "main")
         self.assertEqual(dispatch.wrapper_id, "feature.plan")
         self.assertEqual(dispatch.wrapper_version, "1.0.0")
         self.assertIn("Do not edit files", dispatch.wrapped_markdown)
@@ -58,6 +63,8 @@ class GoldenPromptToPlanTests(unittest.TestCase):
             markdown=PROMPT,
             sender="chatgpt:planner",
             recipient="cursor:backend",
+            repository_url=REPOSITORY,
+            base_ref="main",
             idempotency_key="golden-001",
         )
         self.assertTrue(replay.duplicate)
@@ -66,6 +73,32 @@ class GoldenPromptToPlanTests(unittest.TestCase):
         self.assertEqual(replay.executor_run_id, first.executor_run_id)
         self.assertEqual(len(self.cursor.dispatches), 1)
         self.assertEqual(len(self.store.list_ledger(first.work_order_id)), 3)
+
+    def test_completed_plan_is_returned_and_receipted_once(self) -> None:
+        receipt = self.service.submit_prompt_for_planning(
+            markdown=PROMPT,
+            sender="chatgpt:planner",
+            recipient="cursor:backend",
+            repository_url=REPOSITORY,
+            idempotency_key="golden-plan-return",
+        )
+
+        first = self.service.refresh_planning(receipt.work_order_id)
+        second = self.service.refresh_planning(receipt.work_order_id)
+
+        self.assertEqual(first.to_dict(), second.to_dict())
+        self.assertEqual(first.work_order_id, receipt.work_order_id)
+        self.assertIn("Recorded implementation plan", first.to_dict()["content"])
+        self.assertEqual(
+            [entry.event_type for entry in self.store.list_ledger(receipt.work_order_id)],
+            [
+                "work_order.accepted",
+                "work_order.routed",
+                "executor.acknowledged",
+                "plan.received",
+                "plan.available",
+            ],
+        )
 
 
 if __name__ == "__main__":

@@ -16,25 +16,33 @@ auditable receipt.
 Produce an implementation plan. Do not edit files.
 ```
 
-## Expected ledger
+## Expected completed ledger
 
 | Sequence | Event | Actor | Counterparty |
 |---:|---|---|---|
 | 1 | `work_order.accepted` | planner | broker |
 | 2 | `work_order.routed` | broker | cursor executor |
 | 3 | `executor.acknowledged` | cursor executor | broker |
+| 4 | `plan.received` | cursor executor | broker |
+| 5 | `plan.available` | broker | planner |
 
 ## Assertions
 
 - The content SHA-256 in the receipt matches the submitted bytes.
 - The applied wrapper is `feature.plan@1.0.0`.
 - The executor receives `mode=PLAN_ONLY`.
+- Cursor receives native `mode=plan`, `workOnCurrentBranch=false`, and
+  `autoCreatePR=false`.
 - The executor call count is one.
+- The terminal plan result is stored with a SHA-256 fingerprint.
+- The planner can retrieve the same immutable `PlanPacket` through MCP.
 - Replaying the idempotency key returns the same work-order ID.
 - The replay does not launch a second executor run.
+- Repeated refresh does not duplicate plan ledger entries.
 - No repository mutation or pull request is permitted in this phase.
 
-## Next extension
+## Live pass criteria
 
-Add a `plan.ready` packet, route it back to the planner, and support a
-`@ewb refinement.plan parent=<id>` response in the same conversation thread.
+The credential-free recording adapter proves the broker contracts. The live
+test passes only when the same flow creates a real Cursor Cloud agent against
+the selected repository and returns its final Plan-mode result to the planner.

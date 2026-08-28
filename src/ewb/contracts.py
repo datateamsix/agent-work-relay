@@ -22,6 +22,24 @@ class WorkStatus(StrEnum):
     FAILED = "FAILED"
 
 
+class ExecutorRunStatus(StrEnum):
+    CREATING = "CREATING"
+    RUNNING = "RUNNING"
+    FINISHED = "FINISHED"
+    ERROR = "ERROR"
+    CANCELLED = "CANCELLED"
+    EXPIRED = "EXPIRED"
+
+    @property
+    def terminal(self) -> bool:
+        return self in {
+            ExecutorRunStatus.FINISHED,
+            ExecutorRunStatus.ERROR,
+            ExecutorRunStatus.CANCELLED,
+            ExecutorRunStatus.EXPIRED,
+        }
+
+
 @dataclass(frozen=True, slots=True)
 class Directive:
     kind: WorkKind
@@ -42,6 +60,8 @@ class WorkOrder:
     kind: WorkKind
     action: WorkAction
     parent_work_order_id: str | None
+    repository_url: str
+    base_ref: str
     markdown: str
     content_sha256: str
     wrapper_id: str
@@ -59,6 +79,9 @@ class PlanningDispatch:
     work_order_id: str
     recipient: str
     mode: str
+    repository_url: str
+    base_ref: str
+    existing_agent_id: str | None
     wrapped_markdown: str
     content_sha256: str
     wrapper_id: str
@@ -68,10 +91,54 @@ class PlanningDispatch:
 
 @dataclass(frozen=True, slots=True)
 class ExecutorAcknowledgement:
+    executor_agent_id: str
     executor_run_id: str
     executor: str
+    executor_url: str | None
     accepted: bool
     message: str
+
+
+@dataclass(frozen=True, slots=True)
+class PlanningRunResult:
+    executor_agent_id: str
+    executor_run_id: str
+    executor: str
+    status: ExecutorRunStatus
+    result: str | None = None
+    duration_ms: int | None = None
+    git: dict[str, Any] | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class PlanningStatusReceipt:
+    work_order_id: str
+    status: WorkStatus
+    executor_status: ExecutorRunStatus
+    executor_agent_id: str
+    executor_run_id: str
+    ledger_sequence: int
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass(frozen=True, slots=True)
+class PlanPacket:
+    plan_id: str
+    work_order_id: str
+    executor: str
+    executor_agent_id: str
+    executor_run_id: str
+    content: str
+    content_sha256: str
+    duration_ms: int | None
+    git: dict[str, Any] | None
+    completed_at: str
+    ledger_sequence: int
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
 
 
 @dataclass(frozen=True, slots=True)

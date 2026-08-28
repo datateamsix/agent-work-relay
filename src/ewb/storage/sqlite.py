@@ -19,6 +19,8 @@ CREATE TABLE IF NOT EXISTS work_orders (
     kind TEXT NOT NULL,
     action TEXT NOT NULL,
     parent_work_order_id TEXT,
+    repository_url TEXT NOT NULL,
+    base_ref TEXT NOT NULL,
     markdown TEXT NOT NULL,
     content_sha256 TEXT NOT NULL,
     wrapper_id TEXT NOT NULL,
@@ -51,6 +53,22 @@ class SQLiteStateStore:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         with self._connection() as connection:
             connection.executescript(_SCHEMA)
+            self._migrate(connection)
+
+    @staticmethod
+    def _migrate(connection: sqlite3.Connection) -> None:
+        columns = {
+            str(row["name"])
+            for row in connection.execute("PRAGMA table_info(work_orders)").fetchall()
+        }
+        if "repository_url" not in columns:
+            connection.execute(
+                "ALTER TABLE work_orders ADD COLUMN repository_url TEXT NOT NULL DEFAULT ''"
+            )
+        if "base_ref" not in columns:
+            connection.execute(
+                "ALTER TABLE work_orders ADD COLUMN base_ref TEXT NOT NULL DEFAULT 'main'"
+            )
 
     @contextmanager
     def _connection(self) -> Iterator[sqlite3.Connection]:
@@ -85,9 +103,10 @@ class SQLiteStateStore:
                 """
                 INSERT INTO work_orders (
                     work_order_id, idempotency_key, sender, recipient, kind, action,
-                    parent_work_order_id, markdown, content_sha256, wrapper_id,
-                    wrapper_version, wrapper_sha256, status, created_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    parent_work_order_id, repository_url, base_ref, markdown,
+                    content_sha256, wrapper_id, wrapper_version, wrapper_sha256,
+                    status, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     work_order.work_order_id,
@@ -97,6 +116,8 @@ class SQLiteStateStore:
                     work_order.kind.value,
                     work_order.action.value,
                     work_order.parent_work_order_id,
+                    work_order.repository_url,
+                    work_order.base_ref,
                     work_order.markdown,
                     work_order.content_sha256,
                     work_order.wrapper_id,
@@ -118,6 +139,13 @@ class SQLiteStateStore:
                 },
             ).sequence
             return work_order, True, sequence
+
+    def get_work_order(self, work_order_id: str) -> WorkOrder | None:
+        with self._connection() as connection:
+            row = connection.execute(
+                "SELECT * FROM work_orders WHERE work_order_id = ?", (work_order_id,)
+            ).fetchone()
+            return None if row is None else self._row_to_work_order(row)
 
     def get_by_idempotency_key(self, idempotency_key: str) -> WorkOrder | None:
         with self._connection() as connection:
@@ -200,6 +228,8 @@ class SQLiteStateStore:
             kind=WorkKind(row["kind"]),
             action=WorkAction(row["action"]),
             parent_work_order_id=row["parent_work_order_id"],
+            repository_url=row["repository_url"],
+            base_ref=row["base_ref"],
             markdown=row["markdown"],
             content_sha256=row["content_sha256"],
             wrapper_id=row["wrapper_id"],

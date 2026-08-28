@@ -47,7 +47,8 @@ stateDiagram-v2
     ROUTED --> FAILED
 ```
 
-Only the first three states are exercised in `EWB-GT-001`.
+The recording adapter exercises the complete state path in `EWB-GT-001`. The
+Cursor Cloud adapter uses the same transitions and receipts.
 
 ## Provider portability
 
