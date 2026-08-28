@@ -4,6 +4,10 @@ Typed, auditable work-order handoffs between planning agents and coding agents.
 
 ## The problem: Humans are the message couriers
 
+*Copying and pasting prompts, clicking download buttons for artifacts and
+Markdown files, and transferring files from local download folders into
+development projects. Madness!*
+
 A common AI-assisted engineering workflow starts in one tool and finishes in
 another:
 
