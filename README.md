@@ -35,9 +35,7 @@ explicit:
 ```mermaid
 sequenceDiagram
     participant P as Planning Agent (ChatGPT or Claude)
-    box rgb(226, 222, 255) Agent Work Relay (AWR)
-        participant B as Work Broker
-    end
+    participant B as * AWR Work Broker *
     participant L as Receipt Ledger
     participant C as Cursor Agent
 
