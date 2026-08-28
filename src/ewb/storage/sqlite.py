@@ -9,6 +9,7 @@ from typing import Any
 from uuid import uuid4
 
 from ..contracts import LedgerEntry, WorkAction, WorkKind, WorkOrder, WorkStatus
+from .base import WorkOrderSession
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS work_orders (
@@ -44,6 +45,18 @@ CREATE TABLE IF NOT EXISTS ledger (
 
 CREATE INDEX IF NOT EXISTS idx_ledger_work_order
 ON ledger(work_order_id, sequence);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_ledger_unique_routed
+ON ledger(work_order_id) WHERE event_type = 'work_order.routed';
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_ledger_unique_acknowledged
+ON ledger(work_order_id) WHERE event_type = 'executor.acknowledged';
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_ledger_unique_plan_received
+ON ledger(work_order_id) WHERE event_type = 'plan.received';
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_ledger_unique_plan_available
+ON ledger(work_order_id) WHERE event_type = 'plan.available';
 """
 
 
@@ -69,10 +82,34 @@ class SQLiteStateStore:
             connection.execute(
                 "ALTER TABLE work_orders ADD COLUMN base_ref TEXT NOT NULL DEFAULT 'main'"
             )
+        connection.execute(
+            """
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_ledger_unique_routed
+            ON ledger(work_order_id) WHERE event_type = 'work_order.routed'
+            """
+        )
+        connection.execute(
+            """
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_ledger_unique_acknowledged
+            ON ledger(work_order_id) WHERE event_type = 'executor.acknowledged'
+            """
+        )
+        connection.execute(
+            """
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_ledger_unique_plan_received
+            ON ledger(work_order_id) WHERE event_type = 'plan.received'
+            """
+        )
+        connection.execute(
+            """
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_ledger_unique_plan_available
+            ON ledger(work_order_id) WHERE event_type = 'plan.available'
+            """
+        )
 
     @contextmanager
     def _connection(self) -> Iterator[sqlite3.Connection]:
-        connection = sqlite3.connect(self.path)
+        connection = sqlite3.connect(self.path, timeout=30.0)
         connection.row_factory = sqlite3.Row
         connection.execute("PRAGMA foreign_keys = ON")
         connection.execute("PRAGMA journal_mode = WAL")
@@ -218,6 +255,18 @@ class SQLiteStateStore:
                 ).fetchall()
             return [self._row_to_ledger(row) for row in rows]
 
+    @contextmanager
+    def lock_work_order(self, work_order_id: str) -> Iterator[WorkOrderSession]:
+        with self._connection() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            row = connection.execute(
+                "SELECT * FROM work_orders WHERE work_order_id = ?",
+                (work_order_id,),
+            ).fetchone()
+            if row is None:
+                raise KeyError(f"Unknown work order: {work_order_id}")
+            yield _SQLiteWorkOrderSession(self, connection, work_order_id)
+
     @staticmethod
     def _row_to_work_order(row: sqlite3.Row) -> WorkOrder:
         return WorkOrder(
@@ -250,4 +299,56 @@ class SQLiteStateStore:
             counterparty=row["counterparty"],
             payload=json.loads(row["payload_json"]),
             created_at=row["created_at"],
+        )
+
+
+class _SQLiteWorkOrderSession:
+    def __init__(
+        self,
+        store: SQLiteStateStore,
+        connection: sqlite3.Connection,
+        work_order_id: str,
+    ) -> None:
+        self._store = store
+        self._connection = connection
+        self._work_order_id = work_order_id
+
+    def get_work_order(self) -> WorkOrder:
+        row = self._connection.execute(
+            "SELECT * FROM work_orders WHERE work_order_id = ?",
+            (self._work_order_id,),
+        ).fetchone()
+        if row is None:
+            raise KeyError(f"Unknown work order: {self._work_order_id}")
+        return SQLiteStateStore._row_to_work_order(row)
+
+    def list_ledger(self) -> list[LedgerEntry]:
+        rows = self._connection.execute(
+            "SELECT * FROM ledger WHERE work_order_id = ? ORDER BY sequence",
+            (self._work_order_id,),
+        ).fetchall()
+        return [SQLiteStateStore._row_to_ledger(row) for row in rows]
+
+    def update_status(self, status: WorkStatus) -> None:
+        cursor = self._connection.execute(
+            "UPDATE work_orders SET status = ? WHERE work_order_id = ?",
+            (status.value, self._work_order_id),
+        )
+        if cursor.rowcount != 1:
+            raise KeyError(f"Unknown work order: {self._work_order_id}")
+
+    def append_ledger(
+        self,
+        event_type: str,
+        actor: str,
+        counterparty: str,
+        payload: dict[str, Any],
+    ) -> LedgerEntry:
+        return self._store._append_ledger_on_connection(
+            self._connection,
+            self._work_order_id,
+            event_type,
+            actor,
+            counterparty,
+            payload,
         )

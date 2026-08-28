@@ -49,7 +49,7 @@ def _parser() -> argparse.ArgumentParser:
     wait.add_argument("--db", type=Path, default=Path(".ewb/ewb.db"))
 
     ledger = subparsers.add_parser("ledger", help="Print the append-only ledger")
-    ledger.add_argument("--db", type=Path, default=Path(".ewb/demo.db"))
+    ledger.add_argument("--db", type=Path, default=Path(".ewb/ewb.db"))
     ledger.add_argument("--work-order-id")
 
     subparsers.add_parser("mcp", help="Run the MCP v2 server")

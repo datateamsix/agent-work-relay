@@ -1,8 +1,27 @@
 from __future__ import annotations
 
+from contextlib import AbstractContextManager
 from typing import Any, Protocol
 
 from ..contracts import LedgerEntry, WorkOrder, WorkStatus
+
+
+class WorkOrderSession(Protocol):
+    """A single-work-order write transaction used for idempotent state updates."""
+
+    def get_work_order(self) -> WorkOrder: ...
+
+    def list_ledger(self) -> list[LedgerEntry]: ...
+
+    def update_status(self, status: WorkStatus) -> None: ...
+
+    def append_ledger(
+        self,
+        event_type: str,
+        actor: str,
+        counterparty: str,
+        payload: dict[str, Any],
+    ) -> LedgerEntry: ...
 
 
 class StateStore(Protocol):
@@ -24,3 +43,5 @@ class StateStore(Protocol):
     ) -> LedgerEntry: ...
 
     def list_ledger(self, work_order_id: str | None = None) -> list[LedgerEntry]: ...
+
+    def lock_work_order(self, work_order_id: str) -> AbstractContextManager[WorkOrderSession]: ...
