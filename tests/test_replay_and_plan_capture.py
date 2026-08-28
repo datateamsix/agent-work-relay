@@ -7,23 +7,23 @@ import unittest
 from datetime import UTC, datetime
 from pathlib import Path
 
-from ewb.cli import _parser
-from ewb.contracts import (
+from awr.cli import _parser
+from awr.contracts import (
     ExecutorAcknowledgement,
-    PlanPacket,
     PlanningDispatch,
+    PlanPacket,
     WorkAction,
     WorkKind,
     WorkOrder,
     WorkStatus,
 )
-from ewb.decorators import parse_directive
-from ewb.executors.recording_cursor import RecordingCursorExecutor
-from ewb.service import BrokerService
-from ewb.storage.sqlite import SQLiteStateStore
-from ewb.wrappers import wrap_prompt
+from awr.decorators import parse_directive
+from awr.executors.recording_cursor import RecordingCursorExecutor
+from awr.service import BrokerService
+from awr.storage.sqlite import SQLiteStateStore
+from awr.wrappers import wrap_prompt
 
-FEATURE = """@ewb feature.plan
+FEATURE = """@awr feature.plan
 
 # Feature
 """
@@ -45,7 +45,7 @@ class FailOnceExecutor(RecordingCursorExecutor):
 class ReplayAndPlanCaptureTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temp_dir = tempfile.TemporaryDirectory()
-        self.store = SQLiteStateStore(Path(self.temp_dir.name) / "ewb.db")
+        self.store = SQLiteStateStore(Path(self.temp_dir.name) / "awr.db")
         self.cursor = RecordingCursorExecutor()
         self.service = BrokerService(self.store, self.cursor)
 
@@ -93,7 +93,7 @@ class ReplayAndPlanCaptureTests(unittest.TestCase):
         )
 
     def test_replay_resumes_accepted_work_order_before_dispatch(self) -> None:
-        work_order_id = "EWB-11111111-1111-1111-1111-111111111111"
+        work_order_id = "AWR-11111111-1111-1111-1111-111111111111"
         directive = parse_directive(FEATURE)
         wrapped = wrap_prompt(directive, FEATURE, work_order_id)
         content_sha256 = hashlib.sha256(FEATURE.encode("utf-8")).hexdigest()
@@ -152,7 +152,7 @@ class ReplayAndPlanCaptureTests(unittest.TestCase):
             work_order_id=receipt.work_order_id,
             event_type="plan.received",
             actor="cursor:recording",
-            counterparty="broker:ewb",
+            counterparty="broker:awr",
             payload={
                 "plan_id": f"PLAN-{content_sha256[:24]}",
                 "executor_agent_id": acknowledgement.payload["executor_agent_id"],
@@ -208,7 +208,7 @@ class ReplayAndPlanCaptureTests(unittest.TestCase):
             work_order_id=receipt.work_order_id,
             event_type="plan.received",
             actor="cursor:recording",
-            counterparty="broker:ewb",
+            counterparty="broker:awr",
             payload={
                 "plan_id": f"PLAN-{content_sha256[:24]}",
                 "executor_agent_id": acknowledgement.payload["executor_agent_id"],
@@ -232,7 +232,7 @@ class ReplayAndPlanCaptureTests(unittest.TestCase):
             idempotency_key="concurrent-plan",
         )
         results: list[PlanPacket] = []
-        errors: list[BaseException] = []
+        errors: list[Exception] = []
         barrier = threading.Barrier(8)
 
         def worker() -> None:
@@ -240,9 +240,9 @@ class ReplayAndPlanCaptureTests(unittest.TestCase):
                 barrier.wait()
                 result = self.service.refresh_planning(receipt.work_order_id)
                 if not isinstance(result, PlanPacket):
-                    raise AssertionError(f"expected PlanPacket, got {type(result)}")
+                    raise TypeError(f"expected PlanPacket, got {type(result)}")
                 results.append(result)
-            except BaseException as exc:
+            except Exception as exc:  # noqa: BLE001 - capture thread failures for assertion
                 errors.append(exc)
 
         threads = [threading.Thread(target=worker) for _ in range(8)]
@@ -266,8 +266,8 @@ class CliDefaultTests(unittest.TestCase):
         parser = _parser()
         ledger = parser.parse_args(["ledger"])
         submit = parser.parse_args(["submit", "prompt.md"])
-        self.assertEqual(ledger.db, Path(".ewb/ewb.db"))
-        self.assertEqual(submit.db, Path(".ewb/ewb.db"))
+        self.assertEqual(ledger.db, Path(".awr/awr.db"))
+        self.assertEqual(submit.db, Path(".awr/awr.db"))
 
 
 if __name__ == "__main__":

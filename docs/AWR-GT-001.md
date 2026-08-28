@@ -1,4 +1,4 @@
-# EWB-GT-001 — ChatGPT-to-Cursor prompt-to-plan
+# AWR-GT-001 — ChatGPT-to-Cursor prompt-to-plan
 
 ## Goal
 
@@ -9,7 +9,7 @@ auditable receipt.
 ## Input
 
 ```markdown
-@ewb feature.plan
+@awr feature.plan
 
 # Add project health endpoint
 

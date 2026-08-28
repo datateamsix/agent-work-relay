@@ -3,8 +3,8 @@ from __future__ import annotations
 import unittest
 from typing import Any
 
-from ewb.contracts import ExecutorRunStatus, PlanningDispatch
-from ewb.executors.cursor_cloud import CursorCloudExecutor
+from awr.contracts import ExecutorRunStatus, PlanningDispatch
+from awr.executors.cursor_cloud import CursorCloudExecutor
 
 
 class FakeResponse:
@@ -34,7 +34,7 @@ class FakeClient:
 
 def dispatch(existing_agent_id: str | None = None) -> PlanningDispatch:
     return PlanningDispatch(
-        work_order_id="EWB-00000000-0000-0000-0000-000000000001",
+        work_order_id="AWR-00000000-0000-0000-0000-000000000001",
         recipient="cursor:backend",
         mode="PLAN_ONLY",
         repository_url="https://github.com/example/project",

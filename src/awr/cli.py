@@ -10,7 +10,7 @@ from .contracts import PlanPacket
 from .factory import build_service
 from .storage.sqlite import SQLiteStateStore
 
-_DEMO_PROMPT = """@ewb feature.plan
+_DEMO_PROMPT = """@awr feature.plan
 
 # Add a project health endpoint
 
@@ -19,19 +19,19 @@ Review the repository and produce an implementation plan. Do not edit files.
 
 
 def _parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="ewb", description="Engineering Work Broker")
+    parser = argparse.ArgumentParser(prog="awr", description="Agent Work Relay")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    demo = subparsers.add_parser("demo", help="Run EWB-GT-001 with a recording Cursor adapter")
-    demo.add_argument("--db", type=Path, default=Path(".ewb/demo.db"))
+    demo = subparsers.add_parser("demo", help="Run AWR-GT-001 with a recording Cursor adapter")
+    demo.add_argument("--db", type=Path, default=Path(".awr/demo.db"))
 
     refresh = subparsers.add_parser("refresh", help="Refresh a planning run")
     refresh.add_argument("work_order_id")
-    refresh.add_argument("--db", type=Path, default=Path(".ewb/ewb.db"))
+    refresh.add_argument("--db", type=Path, default=Path(".awr/awr.db"))
 
     plan = subparsers.add_parser("plan", help="Print a completed plan packet")
     plan.add_argument("work_order_id")
-    plan.add_argument("--db", type=Path, default=Path(".ewb/ewb.db"))
+    plan.add_argument("--db", type=Path, default=Path(".awr/awr.db"))
 
     submit = subparsers.add_parser("submit", help="Submit a decorated Markdown file")
     submit.add_argument("prompt_file", type=Path)
@@ -40,16 +40,16 @@ def _parser() -> argparse.ArgumentParser:
     submit.add_argument("--repository-url")
     submit.add_argument("--base-ref")
     submit.add_argument("--idempotency-key")
-    submit.add_argument("--db", type=Path, default=Path(".ewb/ewb.db"))
+    submit.add_argument("--db", type=Path, default=Path(".awr/awr.db"))
 
     wait = subparsers.add_parser("wait", help="Wait for a planning run to finish")
     wait.add_argument("work_order_id")
     wait.add_argument("--interval", type=float, default=5.0)
     wait.add_argument("--timeout", type=float, default=900.0)
-    wait.add_argument("--db", type=Path, default=Path(".ewb/ewb.db"))
+    wait.add_argument("--db", type=Path, default=Path(".awr/awr.db"))
 
     ledger = subparsers.add_parser("ledger", help="Print the append-only ledger")
-    ledger.add_argument("--db", type=Path, default=Path(".ewb/ewb.db"))
+    ledger.add_argument("--db", type=Path, default=Path(".awr/awr.db"))
     ledger.add_argument("--work-order-id")
 
     subparsers.add_parser("mcp", help="Run the MCP v2 server")
@@ -66,7 +66,7 @@ def main(argv: Sequence[str] | None = None) -> None:
             recipient="cursor:backend",
             repository_url="https://github.com/example/example",
             base_ref="main",
-            idempotency_key="EWB-GT-001-demo",
+            idempotency_key="AWR-GT-001-demo",
         )
         plan_packet = service.refresh_planning(receipt.work_order_id)
         print(

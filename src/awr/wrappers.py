@@ -15,7 +15,7 @@ class WrappedPrompt:
     markdown: str
 
 
-_PLAN_POLICY = """# Engineering Work Broker envelope
+_PLAN_POLICY = """# Agent Work Relay envelope
 
 - Operating mode: PLAN_ONLY
 - Acknowledge the work-order ID before analysis.

@@ -1,4 +1,4 @@
-# Engineering Work Broker agent instructions
+# Agent Work Relay agent instructions
 
 Before changing code, read `README.md`, `docs/ARCHITECTURE.md`, and the relevant
 test specification.
@@ -19,7 +19,7 @@ test specification.
 
 ## Prototype priorities
 
-1. Preserve the `EWB-GT-001` golden path.
+1. Preserve the `AWR-GT-001` golden path.
 2. Add the real Cursor adapter behind `PlanningExecutor`.
 3. Return the completed planning packet to the originating planner.
 4. Add Firestore and Supabase stores without changing domain contracts.

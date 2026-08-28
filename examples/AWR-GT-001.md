@@ -1,4 +1,4 @@
-@ewb feature.plan
+@awr feature.plan
 
 # Inspect the repository
 

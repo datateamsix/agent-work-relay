@@ -1,7 +1,7 @@
 # Live prototype runbook
 
-This runbook takes Engineering Work Broker from the credential-free recording
-demo to `EWB-GT-001` against a real Cursor Cloud agent.
+This runbook takes Agent Work Relay from the credential-free recording
+demo to `AWR-GT-001` against a real Cursor Cloud agent.
 
 ## What the live test proves
 
@@ -33,7 +33,7 @@ the ledger, or Git.
 
 ```bash
 uv sync --extra mcp --extra cursor --extra dev
-uv run ewb demo --db .ewb/demo.db
+uv run awr demo --db .awr/demo.db
 ```
 
 The output must contain both a submission receipt and a `PlanPacket`. The local
@@ -50,11 +50,11 @@ plan.available
 ## 2. Configure Cursor Cloud
 
 ```bash
-export EWB_EXECUTOR=cursor_cloud
-export EWB_STORAGE=sqlite
-export EWB_SQLITE_PATH=.ewb/live.db
-export EWB_REPOSITORY_URL=https://github.com/your-org/your-repo
-export EWB_BASE_REF=main
+export AWR_EXECUTOR=cursor_cloud
+export AWR_STORAGE=sqlite
+export AWR_SQLITE_PATH=.awr/live.db
+export AWR_REPOSITORY_URL=https://github.com/your-org/your-repo
+export AWR_BASE_REF=main
 export CURSOR_API_BASE_URL=https://api.cursor.com
 export CURSOR_API_KEY=your-key
 ```
@@ -64,10 +64,10 @@ the key in a work order, wrapper, exception payload, or ledger entry.
 
 ## 3. Create a safe test work order
 
-The repository includes `examples/EWB-GT-001.md`:
+The repository includes `examples/AWR-GT-001.md`:
 
 ```markdown
-@ewb feature.plan
+@awr feature.plan
 
 # Inspect the repository
 
@@ -79,17 +79,17 @@ request.
 Submit it through the operator CLI:
 
 ```bash
-uv run ewb submit examples/EWB-GT-001.md \
+uv run awr submit examples/AWR-GT-001.md \
   --sender chatgpt:product-planner \
   --recipient cursor:cloud \
-  --idempotency-key EWB-GT-001-live
+  --idempotency-key AWR-GT-001-live
 ```
 
 Save the returned `work_order_id`, then wait for the plan:
 
 ```bash
-uv run ewb wait WORK_ORDER_ID --interval 5 --timeout 900
-uv run ewb ledger --db .ewb/live.db --work-order-id WORK_ORDER_ID
+uv run awr wait WORK_ORDER_ID --interval 5 --timeout 900
+uv run awr ledger --db .awr/live.db --work-order-id WORK_ORDER_ID
 ```
 
 The `PlanPacket` must contain the same Cursor agent/run IDs recorded by
@@ -100,7 +100,7 @@ The `PlanPacket` must contain the same Cursor agent/run IDs recorded by
 Start the local stdio server:
 
 ```bash
-uv run ewb mcp
+uv run awr mcp
 ```
 
 The server exposes:

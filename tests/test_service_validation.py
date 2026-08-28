@@ -4,11 +4,11 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from ewb.executors.recording_cursor import RecordingCursorExecutor
-from ewb.service import BrokerService, WorkOrderValidationError
-from ewb.storage.sqlite import SQLiteStateStore
+from awr.executors.recording_cursor import RecordingCursorExecutor
+from awr.service import BrokerService, WorkOrderValidationError
+from awr.storage.sqlite import SQLiteStateStore
 
-FEATURE = """@ewb feature.plan
+FEATURE = """@awr feature.plan
 
 # Feature
 """
@@ -20,7 +20,7 @@ class ServiceValidationTests(unittest.TestCase):
         self.temp_dir = tempfile.TemporaryDirectory()
         self.cursor = RecordingCursorExecutor()
         self.service = BrokerService(
-            SQLiteStateStore(Path(self.temp_dir.name) / "ewb.db"), self.cursor
+            SQLiteStateStore(Path(self.temp_dir.name) / "awr.db"), self.cursor
         )
 
     def tearDown(self) -> None:
@@ -37,7 +37,7 @@ class ServiceValidationTests(unittest.TestCase):
     def test_unknown_refinement_parent_fails_closed(self) -> None:
         with self.assertRaisesRegex(WorkOrderValidationError, "Unknown parent"):
             self.service.submit_prompt_for_planning(
-                markdown="@ewb refinement.plan parent=EWB-missing\n\nRefine it.",
+                markdown="@awr refinement.plan parent=AWR-missing\n\nRefine it.",
                 sender="chatgpt:planner",
                 recipient="cursor:backend",
             )
@@ -53,7 +53,7 @@ class ServiceValidationTests(unittest.TestCase):
         self.assertIsNone(parent_agent_id)
 
         self.service.submit_prompt_for_planning(
-            markdown=f"@ewb refinement.plan parent={parent.work_order_id}\n\nTighten the plan.",
+            markdown=f"@awr refinement.plan parent={parent.work_order_id}\n\nTighten the plan.",
             sender="chatgpt:planner",
             recipient="cursor:backend",
         )

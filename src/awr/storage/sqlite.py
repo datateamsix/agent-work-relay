@@ -169,7 +169,7 @@ class SQLiteStateStore:
                 work_order_id=work_order.work_order_id,
                 event_type="work_order.accepted",
                 actor=work_order.sender,
-                counterparty="broker:ewb",
+                counterparty="broker:awr",
                 payload={
                     "content_sha256": work_order.content_sha256,
                     "wrapper": f"{work_order.wrapper_id}@{work_order.wrapper_version}",

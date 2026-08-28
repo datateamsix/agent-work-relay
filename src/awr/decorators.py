@@ -10,7 +10,7 @@ class DirectiveError(ValueError):
 
 
 _DIRECTIVE = re.compile(
-    r"^@ewb\s+(?P<kind>feature|refinement)\.(?P<action>plan)"
+    r"^@awr\s+(?P<kind>feature|refinement)\.(?P<action>plan)"
     r"(?:\s+parent=(?P<parent>[A-Za-z0-9._:-]+))?$"
 )
 
@@ -20,13 +20,13 @@ def parse_directive(markdown: str) -> Directive:
     if not lines:
         raise DirectiveError("The Markdown payload is empty.")
 
-    decorated_lines = [line.strip() for line in lines if line.strip().startswith("@ewb")]
+    decorated_lines = [line.strip() for line in lines if line.strip().startswith("@awr")]
     if len(decorated_lines) != 1 or lines[0].strip() != decorated_lines[0]:
-        raise DirectiveError("Exactly one @ewb directive must be the first line.")
+        raise DirectiveError("Exactly one @awr directive must be the first line.")
 
     match = _DIRECTIVE.fullmatch(decorated_lines[0])
     if match is None:
-        raise DirectiveError("Unknown or malformed @ewb directive.")
+        raise DirectiveError("Unknown or malformed @awr directive.")
 
     kind = WorkKind(match.group("kind"))
     action = WorkAction(match.group("action"))

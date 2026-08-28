@@ -71,7 +71,7 @@ class CursorCloudExecutor:
             "/v1/agents",
             json={
                 "agentId": agent_id,
-                "name": f"EWB planning {dispatch.work_order_id}",
+                "name": f"AWR planning {dispatch.work_order_id}",
                 "prompt": {"text": dispatch.wrapped_markdown},
                 "repos": [{"url": dispatch.repository_url, "startingRef": dispatch.base_ref}],
                 "mode": "plan",
@@ -128,9 +128,9 @@ class CursorCloudExecutor:
 
     @staticmethod
     def _agent_id_for_work_order(work_order_id: str) -> str:
-        prefix = "EWB-"
+        prefix = "AWR-"
         if not work_order_id.startswith(prefix):
-            raise ValueError(f"Invalid EWB work-order ID: {work_order_id}")
+            raise ValueError(f"Invalid AWR work-order ID: {work_order_id}")
         value = UUID(work_order_id.removeprefix(prefix))
         return f"bc-{value}"
 

@@ -1,11 +1,19 @@
-# Engineering Work Broker
+# Agent Work Relay
+
+> **Pass work between agents—not through humans.**
+
+Agent Work Relay is a durable agnostic work broker that routes requests,
+applies guardrails, records receipts and returns results between AI agents.
 
 ## Product summary and next build for the Cursor engineering team
 
-**Status:** Prototype v0.1 handoff  
-**Date:** 2026-08-28  
-**Repository:** `datateamsix/engineering-work-broker`  
-**Next milestone:** Hosted ChatGPT → EWB → Cursor prompt-to-plan loop
+**Status:** Prototype v0.1 handoff
+
+**Date:** 2026-08-28
+
+**Repository:** `datateamsix/agent-work-relay`
+
+**Next milestone:** Hosted ChatGPT → AWR → Cursor prompt-to-plan loop
 
 ## The problem: humans are the message couriers
 
@@ -29,10 +37,11 @@ easy to:
 - lose track of approvals and refinements; or
 - forget exactly what each agent sent and received.
 
-## What EWB does
+## How the relay works
 
-Engineering Work Broker (EWB) gives planning agents and coding agents a typed,
-auditable handoff path.
+Agent Work Relay (AWR) gives AI agents a typed, auditable handoff path. The
+prototype begins with planning agents and coding agents, but its contracts and
+provider boundaries are intentionally broader than engineering.
 
 ```mermaid
 sequenceDiagram
@@ -52,14 +61,14 @@ sequenceDiagram
     B-->>P: Return reviewable plan
 ```
 
-EWB is not another coding agent. It is the control plane between agents. It
+AWR is not another coding agent. It is the control plane between agents. It
 owns deterministic classification, routing, state, idempotency, receipts, and
 the general ledger. Humans retain review and approval authority without acting
 as the transport layer.
 
 ## Product principles
 
-1. **The broker moves the work; the human makes the decisions.**
+1. **The relay moves the work; the human makes the decisions.**
 2. **Every handoff produces a receipt.**
 3. **Accepted payloads are immutable and fingerprinted.**
 4. **Keywords select intent but never grant execution authority.**
@@ -71,13 +80,13 @@ as the transport layer.
 ## Current implementation
 
 The repository already implements the first complete local vertical slice,
-`EWB-GT-001`.
+`AWR-GT-001`.
 
 ### Accepted commands
 
 ```text
-@ewb feature.plan
-@ewb refinement.plan parent=<work-order-id>
+@awr feature.plan
+@awr refinement.plan parent=<work-order-id>
 ```
 
 The first creates a new planning work order. The second validates the parent,
@@ -131,7 +140,7 @@ Supabase, or a dashboard during this slice.
 
 ## Target GCP deployment
 
-EWB will use the existing PreM3 GCP project while remaining operationally
+AWR will use the existing PreM3 GCP project while remaining operationally
 isolated from the PreM3 application.
 
 | Setting | Target |
@@ -139,28 +148,28 @@ isolated from the PreM3 application.
 | GCP project | `modelready-m3` |
 | Project number | `912257136465` |
 | Region | `us-central1` |
-| Cloud Run service | `engineering-work-broker` |
+| Cloud Run service | `agent-work-relay` |
 | MCP endpoint | `https://<cloud-run-host>/mcp` |
 | Health endpoint | `https://<cloud-run-host>/healthz` |
 | State store | Existing Firestore `(default)` database, Native mode |
 | Executor | Cursor Cloud Agents API v1 |
-| Runtime identity | `ewb-runtime@modelready-m3.iam.gserviceaccount.com` |
-| Cursor secret | `ewb-cursor-api-key` |
+| Runtime identity | `awr-runtime@modelready-m3.iam.gserviceaccount.com` |
+| Cursor secret | `awr-cursor-api-key` |
 | MCP authentication | OAuth 2.1 resource server with configurable issuer |
 
 ### Isolation from PreM3
 
-- Do not deploy EWB as part of the PreM3 Cloud Run service.
-- Do not reuse `m3-runtime` as the EWB runtime identity.
-- Do not grant EWB access to PreM3 BigQuery datasets or storage buckets.
-- Use dedicated Firestore collection names beginning with `ewb_`.
+- Do not deploy AWR as part of the PreM3 Cloud Run service.
+- Do not reuse `m3-runtime` as the AWR runtime identity.
+- Do not grant AWR access to PreM3 BigQuery datasets or storage buckets.
+- Use dedicated Firestore collection names beginning with `awr_`.
 - Use dedicated Secret Manager secrets and auth configuration.
-- Keep EWB logs, service configuration, and deployment scripts independently
+- Keep AWR logs, service configuration, and deployment scripts independently
   identifiable.
 
-The EWB service needs a public network route because ChatGPT must reach it.
+The AWR service needs a public network route because ChatGPT must reach it.
 Public reachability does **not** mean an unauthenticated application. Cloud Run
-may permit the network invocation while EWB rejects every `/mcp` request that
+may permit the network invocation while AWR rejects every `/mcp` request that
 lacks a valid OAuth access token. `/healthz` may remain public and must not
 expose configuration or dependency details.
 
@@ -169,7 +178,7 @@ expose configuration or dependency details.
 ```mermaid
 flowchart TD
     P["ChatGPT planning agent"] -->|"HTTPS + OAuth token"| M["Cloud Run MCP endpoint"]
-    M --> B["EWB domain service"]
+    M --> B["AWR domain service"]
     B --> F["Firestore state + ledger"]
     B --> X["Cursor Cloud adapter"]
     X --> C["Cursor planning agent"]
@@ -191,9 +200,9 @@ conformance behavior as SQLite.
 Recommended prototype collections:
 
 ```text
-ewb_work_orders/{work_order_id}
-ewb_work_orders/{work_order_id}/ledger/{sequence_event_id}
-ewb_idempotency/{idempotency_key_hash}
+awr_work_orders/{work_order_id}
+awr_work_orders/{work_order_id}/ledger/{sequence_event_id}
+awr_idempotency/{idempotency_key_hash}
 ```
 
 The work-order document is a materialized snapshot. Ledger documents are
@@ -220,7 +229,7 @@ payload bodies unless a query requires it.
 
 An authenticated ChatGPT MCP connector is expected to use an OAuth 2.1 flow
 that conforms to the MCP authorization specification. ChatGPT cannot present a
-custom API key for this purpose. The deployed EWB service must therefore act as
+custom API key for this purpose. The deployed AWR service must therefore act as
 an OAuth resource server; a static development token may exist only for local
 tests and must be impossible to enable in the production configuration.
 
@@ -231,14 +240,14 @@ The next build must:
 - return a `401` challenge containing `WWW-Authenticate` metadata when an
   access token is missing or invalid;
 - declare an OAuth security scheme and required scopes on every MCP tool;
-- validate signature, issuer, EWB audience/resource, expiration, and scopes on
+- validate signature, issuer, AWR audience/resource, expiration, and scopes on
   every request;
 - support ChatGPT's authorization-code flow with PKCE `S256` through a
   standards-compliant authorization server;
 - support a predefined OAuth client, CIMD, or dynamic client registration as
   selected during planning;
-- use narrow prototype scopes such as `ewb:plan`, `ewb:read`, and
-  `ewb:refresh`;
+- use narrow prototype scopes such as `awr:plan`, `awr:read`, and
+  `awr:refresh`;
 - never log authorization headers, tokens, claims beyond safe actor IDs, the
   Cursor key, or raw secret values;
 - protect `/mcp` and every state-bearing REST endpoint; and
@@ -251,7 +260,7 @@ registration approaches, resource/audience propagation, and usable access
 tokens. If it does, use it through configuration without importing PreM3
 application code. If it does not, recommend a compatible managed authorization
 server in the plan. Do not invent or casually self-host a new identity provider
-inside EWB.
+inside AWR.
 
 ## Runtime and deployment requirements
 
@@ -275,10 +284,10 @@ inside EWB.
 
 ### Minimum runtime permissions
 
-Grant `ewb-runtime` only:
+Grant `awr-runtime` only:
 
-- Firestore/Datastore user access needed for the EWB collections;
-- Secret Manager accessor on `ewb-cursor-api-key` and any auth-provider secret
+- Firestore/Datastore user access needed for the AWR collections;
+- Secret Manager accessor on `awr-cursor-api-key` and any auth-provider secret
   explicitly required by the approved OAuth design; and
 - normal Cloud Run logging permissions.
 
@@ -314,12 +323,12 @@ The build is complete only when all of the following are true:
    insufficient-scope tokens with the correct OAuth challenge.
 4. An authenticated MCP client discovers exactly the four prototype tools.
 5. The service deploys to `modelready-m3` in `us-central1` under
-   `ewb-runtime`.
+   `awr-runtime`.
 6. No Cursor or MCP secret appears in Git, Cloud Run configuration output,
    application logs, Firestore, receipts, or exception bodies.
-7. ChatGPT completes OAuth linking and submits `examples/EWB-GT-001.md`
+7. ChatGPT completes OAuth linking and submits `examples/AWR-GT-001.md`
    without manual file transfer.
-8. EWB returns an acceptance receipt containing the work-order ID and content
+8. AWR returns an acceptance receipt containing the work-order ID and content
    fingerprint.
 9. Cursor accepts one and only one Plan-mode run against the configured
    repository.
@@ -358,17 +367,17 @@ Copy the prompt below into a new Cursor Cloud agent for this repository. Start
 in planning mode, review the plan, and only then authorize implementation.
 
 ```text
-Implement the next Engineering Work Broker milestone: an authenticated,
+Implement the next Agent Work Relay milestone: an authenticated,
 Firestore-backed remote MCP server deployed to Google Cloud Run.
 
 Repository:
-https://github.com/datateamsix/engineering-work-broker
+https://github.com/datateamsix/agent-work-relay
 
 Read before planning:
 - AGENTS.md
 - README.md
 - docs/ARCHITECTURE.md
-- docs/EWB-GT-001.md
+- docs/AWR-GT-001.md
 - docs/LIVE_PROTOTYPE.md
 - docs/CURSOR_PRODUCT_SUMMARY_AND_CLOUD_RUN_BUILD.md
 
@@ -376,18 +385,18 @@ GCP target:
 - project: modelready-m3
 - project number: 912257136465
 - region: us-central1
-- Cloud Run service: engineering-work-broker
+- Cloud Run service: agent-work-relay
 - runtime service account:
-  ewb-runtime@modelready-m3.iam.gserviceaccount.com
+  awr-runtime@modelready-m3.iam.gserviceaccount.com
 - Firestore: existing (default) Native-mode database
-- Cursor secret: ewb-cursor-api-key
+- Cursor secret: awr-cursor-api-key
 - MCP authentication: OAuth 2.1 resource server with configurable issuer
 
 First produce a repository-aware implementation plan. Identify the exact MCP
 Python SDK Streamable HTTP/ASGI mechanism supported by the locked dependency
 version; do not invent an API. Check the current official ChatGPT MCP
 authentication requirements. Evaluate whether the existing PreM3 Clerk setup
-can serve as the authorization server without coupling EWB to PreM3 code. If it
+can serve as the authorization server without coupling AWR to PreM3 code. If it
 cannot, recommend a compatible managed OAuth provider and explain the smallest
 operator setup required. Describe the Firestore transaction model, OAuth
 resource-server boundary, container entry point, GCP resources, IAM roles,
@@ -411,13 +420,13 @@ After plan approval, implement the smallest complete hosted vertical slice:
    Keep the issuer configurable. A static token mode may be used only in local
    tests and must fail closed in the deployed production profile.
 4. Add production container and Cloud Run configuration. Use Python 3.12,
-   listen on PORT, run as non-root, and keep EWB isolated from PreM3 resources.
+   listen on PORT, run as non-root, and keep AWR isolated from PreM3 resources.
 5. Add a reproducible GCP setup/deploy script. Create or bind the dedicated
-   ewb-runtime identity, dedicated secrets, and least-privilege IAM. Do not
+   awr-runtime identity, dedicated secrets, and least-privilege IAM. Do not
    grant Vertex AI, BigQuery, or Cloud Storage access.
 6. Add structured, redacted operational logging and a smoke-test script.
 7. Update README and docs/LIVE_PROTOTYPE.md with exact local, deployment, MCP
-   connection, rollback, and EWB-GT-001 proof instructions.
+   connection, rollback, and AWR-GT-001 proof instructions.
 
 Safety and scope rules:
 - Accepted work-order payloads are immutable.
@@ -447,7 +456,7 @@ Return a completion packet containing:
 - tests and exact results;
 - deployed Cloud Run service URL and revision, if deployed;
 - Secret Manager and IAM resource names without secret values;
-- live EWB work-order, Cursor agent, and Cursor run IDs;
+- live AWR work-order, Cursor agent, and Cursor run IDs;
 - ordered ledger timeline;
 - known limitations and next recommended slice.
 ```
@@ -463,7 +472,7 @@ Return a completion packet containing:
 7. Authenticate `gcloud` as the project owner and authorize the deployment.
 8. Add secret values directly through Secret Manager; never send them through
    the agent conversation.
-9. Connect ChatGPT and run the live EWB golden test against this repository in
+9. Connect ChatGPT and run the live AWR golden test against this repository in
    Plan mode.
 10. Return the completion packet for review before enabling another repository.
 

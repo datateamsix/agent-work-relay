@@ -11,7 +11,7 @@ def create_server() -> Any:
     except ImportError as exc:
         raise RuntimeError("Install the MCP transport with: uv sync --extra mcp") from exc
 
-    server = MCPServer("Engineering Work Broker")
+    server = MCPServer("Agent Work Relay")
     service = build_service()
 
     @server.tool()

@@ -5,12 +5,12 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from ewb.contracts import WorkStatus
-from ewb.executors.recording_cursor import RecordingCursorExecutor
-from ewb.service import BrokerService
-from ewb.storage.sqlite import SQLiteStateStore
+from awr.contracts import WorkStatus
+from awr.executors.recording_cursor import RecordingCursorExecutor
+from awr.service import BrokerService
+from awr.storage.sqlite import SQLiteStateStore
 
-PROMPT = """@ewb feature.plan
+PROMPT = """@awr feature.plan
 
 # Add project health endpoint
 
@@ -22,7 +22,7 @@ REPOSITORY = "https://github.com/example/project"
 class GoldenPromptToPlanTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temp_dir = tempfile.TemporaryDirectory()
-        self.db_path = Path(self.temp_dir.name) / "ewb.db"
+        self.db_path = Path(self.temp_dir.name) / "awr.db"
         self.store = SQLiteStateStore(self.db_path)
         self.cursor = RecordingCursorExecutor()
         self.service = BrokerService(self.store, self.cursor)

@@ -67,7 +67,7 @@ class BrokerService:
             base_ref=resolved_base_ref,
             content_sha256=content_sha256,
         )
-        work_order_id = f"EWB-{uuid4()}"
+        work_order_id = f"AWR-{uuid4()}"
         wrapped = wrap_prompt(directive, markdown, work_order_id)
         candidate = WorkOrder(
             work_order_id=work_order_id,
@@ -136,7 +136,7 @@ class BrokerService:
                     status_event = session.append_ledger(
                         event_type="executor.status",
                         actor=run.executor,
-                        counterparty="broker:ewb",
+                        counterparty="broker:awr",
                         payload={
                             "executor_agent_id": executor_agent_id,
                             "executor_run_id": executor_run_id,
@@ -163,7 +163,7 @@ class BrokerService:
                     failed = session.append_ledger(
                         event_type="executor.failed",
                         actor=run.executor,
-                        counterparty="broker:ewb",
+                        counterparty="broker:awr",
                         payload={
                             "executor_agent_id": executor_agent_id,
                             "executor_run_id": executor_run_id,
@@ -188,7 +188,7 @@ class BrokerService:
             received = session.append_ledger(
                 event_type="plan.received",
                 actor=run.executor,
-                counterparty="broker:ewb",
+                counterparty="broker:awr",
                 payload={
                     "plan_id": plan_id,
                     "executor_agent_id": executor_agent_id,
@@ -202,7 +202,7 @@ class BrokerService:
             session.update_status(WorkStatus.PLAN_READY)
             available = session.append_ledger(
                 event_type="plan.available",
-                actor="broker:ewb",
+                actor="broker:awr",
                 counterparty=work_order.sender,
                 payload={
                     "plan_id": plan_id,
@@ -258,7 +258,7 @@ class BrokerService:
                     session.append_ledger(
                         event_type="executor.failed",
                         actor=self.executor.name,
-                        counterparty="broker:ewb",
+                        counterparty="broker:awr",
                         payload={"error_type": type(exc).__name__, "message": str(exc)},
                     )
             raise
@@ -270,7 +270,7 @@ class BrokerService:
                     existing_rejected = session.append_ledger(
                         event_type="executor.rejected",
                         actor=acknowledgement.executor,
-                        counterparty="broker:ewb",
+                        counterparty="broker:awr",
                         payload={"message": acknowledgement.message},
                     )
             return SubmissionReceipt(
@@ -300,7 +300,7 @@ class BrokerService:
             acknowledged = session.append_ledger(
                 event_type="executor.acknowledged",
                 actor=acknowledgement.executor,
-                counterparty="broker:ewb",
+                counterparty="broker:awr",
                 payload={
                     "executor_agent_id": acknowledgement.executor_agent_id,
                     "executor_run_id": acknowledgement.executor_run_id,
@@ -329,7 +329,7 @@ class BrokerService:
                 return existing
             routed = session.append_ledger(
                 event_type="work_order.routed",
-                actor="broker:ewb",
+                actor="broker:awr",
                 counterparty=work_order.recipient,
                 payload={
                     "mode": "PLAN_ONLY",
@@ -445,7 +445,7 @@ class BrokerService:
             session.update_status(WorkStatus.PLAN_READY)
         available = session.append_ledger(
             event_type="plan.available",
-            actor="broker:ewb",
+            actor="broker:awr",
             counterparty=work_order.sender,
             payload={
                 "plan_id": str(received.payload["plan_id"]),

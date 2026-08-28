@@ -11,7 +11,7 @@ from ..contracts import (
 
 
 class RecordingCursorExecutor:
-    """Credential-free Cursor test double used by EWB-GT-001."""
+    """Credential-free Cursor test double used by AWR-GT-001."""
 
     name = "cursor:recording"
 

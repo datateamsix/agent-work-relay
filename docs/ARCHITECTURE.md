@@ -1,11 +1,13 @@
 # Architecture
 
-EWB is a deterministic broker with MCP at its planner-facing edge. MCP is an
-interface, not the state machine or durable queue.
+AWR is a deterministic work broker with MCP at its planner-facing edge. The
+product relays work between agents; the broker core owns the state, guardrails,
+receipts, and routing. MCP is an interface, not the state machine or durable
+queue.
 
 ```mermaid
 flowchart TD
-    P["Planner: ChatGPT or Claude"] -->|MCP work order| B["EWB broker"]
+    P["Planner: ChatGPT or Claude"] -->|MCP work order| B["AWR broker"]
     B --> S["State store and ledger"]
     B --> X["Executor adapter"]
     X --> C["Cursor or Claude Code"]
@@ -47,7 +49,7 @@ stateDiagram-v2
     ROUTED --> FAILED
 ```
 
-The recording adapter exercises the complete state path in `EWB-GT-001`. The
+The recording adapter exercises the complete state path in `AWR-GT-001`. The
 Cursor Cloud adapter uses the same transitions and receipts.
 
 ## Provider portability

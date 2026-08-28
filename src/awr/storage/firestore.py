@@ -5,4 +5,4 @@ class FirestoreStateStore:
     """Firestore adapter placeholder implementing the StateStore contract next."""
 
     def __init__(self, *_: object, **__: object) -> None:
-        raise NotImplementedError("Firestore is an alternative adapter, not part of EWB-GT-001.")
+        raise NotImplementedError("Firestore is an alternative adapter, not part of AWR-GT-001.")

@@ -1,4 +1,4 @@
-"""Engineering Work Broker."""
+"""Agent Work Relay."""
 
 from .contracts import SubmissionReceipt, WorkOrder
 from .service import BrokerService

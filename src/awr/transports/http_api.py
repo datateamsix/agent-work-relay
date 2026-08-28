@@ -11,7 +11,7 @@ def create_app(service: BrokerService) -> Any:
     except ImportError as exc:
         raise RuntimeError("Install the HTTP transport with: uv sync --extra api") from exc
 
-    app = FastAPI(title="Engineering Work Broker", version="0.1.0")
+    app = FastAPI(title="Agent Work Relay", version="0.1.0")
 
     @app.get("/healthz")
     def healthz() -> dict[str, str]:

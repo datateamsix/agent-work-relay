@@ -1,6 +1,12 @@
-# Engineering Work Broker (EWB)
+# Agent Work Relay (AWR)
 
-Typed, auditable work-order handoffs between planning agents and coding agents.
+> **Pass work between agents—not through humans.**
+
+Agent Work Relay is a durable agnostic work broker that routes requests,
+applies guardrails, records receipts and returns results between AI agents.
+
+The initial engineering profile provides typed, auditable work-order handoffs
+between planning agents and coding agents.
 
 ## The problem: Humans are the message couriers
 
@@ -17,10 +23,10 @@ again.
 future we were promised.**
 
 Every trip creates another chance to lose context, grab the wrong file,
-duplicate work, or forget what was sent. EWB handles the handoff and keeps the
+duplicate work, or forget what was sent. AWR handles the handoff and keeps the
 receipts. You make the decisions; the broker does the courier work.
 
-EWB removes the human from the transport loop while preserving human review and
+AWR removes the human from the transport loop while preserving human review and
 approval. The target prompt-to-plan handoff is intentionally small and
 explicit:
 
@@ -43,36 +49,36 @@ sequenceDiagram
 ```
 
 The scaffold implements this complete sequence with its recording Cursor
-adapter. Set `EWB_EXECUTOR=cursor_cloud` and provide a Cursor API key to run the
+adapter. Set `AWR_EXECUTOR=cursor_cloud` and provide a Cursor API key to run the
 same contracts against a real repository.
 
-## What EWB changes
+## How the relay works
 
-EWB replaces the manual Markdown shuttle with a deterministic control plane.
+AWR replaces the manual Markdown shuttle with a deterministic control plane.
 Planning clients submit a decorated Markdown work order through MCP. The broker
 validates it, applies a versioned wrapper, records every handoff in an
 append-only ledger, routes it through the appropriate executor adapter, and
 returns durable receipts and results to the originating planner.
 
 The planner remains responsible for defining and reviewing the work. The coding
-agent remains responsible for repository-aware planning and implementation. EWB
+agent remains responsible for repository-aware planning and implementation. AWR
 provides the reliable, inspectable path between them.
 
 ## Prototype boundary
 
-The first vertical slice is `EWB-GT-001`: ChatGPT prompt to reviewable Cursor
+The first vertical slice is `AWR-GT-001`: ChatGPT prompt to reviewable Cursor
 plan.
 
-1. A planning agent creates Markdown beginning with `@ewb feature.plan` or
-   `@ewb refinement.plan parent=<work-order-id>`.
-2. The `submit_prompt_for_planning` MCP tool sends it to EWB.
-3. EWB binds the repository and base reference, stores the immutable payload
+1. A planning agent creates Markdown beginning with `@awr feature.plan` or
+   `@awr refinement.plan parent=<work-order-id>`.
+2. The `submit_prompt_for_planning` MCP tool sends it to AWR.
+3. AWR binds the repository and base reference, stores the immutable payload
    hash, and returns an acceptance receipt.
-4. EWB applies a versioned `PLAN_ONLY` wrapper and creates a Cursor run in
+4. AWR applies a versioned `PLAN_ONLY` wrapper and creates a Cursor run in
    native Plan mode with branch mutation and automatic PR creation disabled.
-5. The adapter returns durable agent and run IDs; EWB records the receipt.
+5. The adapter returns durable agent and run IDs; AWR records the receipt.
 6. `refresh_planning` reads the run until Cursor returns its final plan.
-7. EWB fingerprints the plan, records `plan.received` and `plan.available`, and
+7. AWR fingerprints the plan, records `plan.received` and `plan.available`, and
    returns the `PlanPacket` to the originating planner.
 8. Replaying the same idempotency key or refreshing a finished run does not
    duplicate the agent, plan, or ledger receipts.
@@ -86,17 +92,17 @@ domain and ledger contracts.
 The core and its tests use only the Python 3.12 standard library.
 
 ```bash
-cd engineering-work-broker
+cd agent-work-relay
 PYTHONPATH=src python -m unittest discover -s tests -v
-PYTHONPATH=src python -m ewb demo --db .ewb/demo.db
-PYTHONPATH=src python -m ewb ledger --db .ewb/demo.db
+PYTHONPATH=src python -m awr demo --db .awr/demo.db
+PYTHONPATH=src python -m awr ledger --db .awr/demo.db
 ```
 
 Install the MCP transport when you are ready to connect an MCP host:
 
 ```bash
 uv sync --extra mcp --extra dev
-uv run ewb mcp
+uv run awr mcp
 ```
 
 ### Run against Cursor Cloud
@@ -106,15 +112,15 @@ repository, and export the runtime configuration. Keep the key in your shell or
 secret manager—never commit it.
 
 ```bash
-export EWB_EXECUTOR=cursor_cloud
-export EWB_STORAGE=sqlite
-export EWB_SQLITE_PATH=.ewb/ewb.db
-export EWB_REPOSITORY_URL=https://github.com/your-org/your-repo
-export EWB_BASE_REF=main
+export AWR_EXECUTOR=cursor_cloud
+export AWR_STORAGE=sqlite
+export AWR_SQLITE_PATH=.awr/awr.db
+export AWR_REPOSITORY_URL=https://github.com/your-org/your-repo
+export AWR_BASE_REF=main
 export CURSOR_API_KEY=your-key
 
 uv sync --extra mcp --extra cursor --extra dev
-uv run ewb mcp
+uv run awr mcp
 ```
 
 See [docs/LIVE_PROTOTYPE.md](docs/LIVE_PROTOTYPE.md) for the golden-test
@@ -151,9 +157,9 @@ status, duplicate flag, and current ledger sequence.
 ## Repository map
 
 ```text
-src/ewb/
+src/awr/
   contracts.py          typed work orders, receipts, and ledger entries
-  decorators.py         strict @ewb command grammar
+  decorators.py         strict @awr command grammar
   service.py            deterministic orchestration
   wrappers.py           versioned executor envelopes
   executors/            provider-neutral executor port and Cursor seam
@@ -165,7 +171,7 @@ tests/
 docs/
   ARCHITECTURE.md
   CURSOR_PRODUCT_SUMMARY_AND_CLOUD_RUN_BUILD.md
-  EWB-GT-001.md
+  AWR-GT-001.md
   LIVE_PROTOTYPE.md
 ```
 
@@ -185,4 +191,4 @@ browser drafts, but it is not an authoritative multi-agent ledger.
 - Unknown directives fail closed.
 
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and
-[docs/EWB-GT-001.md](docs/EWB-GT-001.md).
+[docs/AWR-GT-001.md](docs/AWR-GT-001.md).
