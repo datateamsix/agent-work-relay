@@ -2,11 +2,59 @@
 
 Typed, auditable work-order handoffs between planning agents and coding agents.
 
-EWB removes the manual Markdown shuttle between ChatGPT or Claude and Cursor or
-Claude Code. Planning clients submit a decorated Markdown work order through
-MCP. The broker validates it, applies a versioned deterministic wrapper, writes
-receipts to an append-only ledger, and routes the request through an executor
-adapter.
+## The problem: the human becomes the message bus
+
+A common AI-assisted engineering workflow starts in one tool and finishes in
+another:
+
+1. Develop a feature idea, architecture decision, or refinement with ChatGPT or
+   Claude.
+2. Turn the conversation into a Markdown specification or implementation
+   prompt.
+3. Download or copy the Markdown, switch tabs, open Cursor or Claude Code, and
+   paste it into the correct repository session.
+4. Wait for the coding agent to review the request and produce a plan.
+5. Copy its plan, questions, branch details, or completion summary back into the
+   planning conversation.
+6. Repeat the same tab-switching and copy/paste loop for every clarification,
+   refinement, review, and approval.
+
+The human is doing integration work that software should handle. Besides the
+friction, this manual shuttle makes it easy to send an outdated prompt, lose
+context, route work to the wrong repository or session, duplicate a run, or
+forget exactly what was sent and received. There is no dependable receipt chain
+or general ledger for the work moving between agents.
+
+```mermaid
+flowchart TB
+    subgraph Manual["Today: the human is the integration layer"]
+        direction LR
+        P1["ChatGPT or Claude"] -->|Copy specification| H["Human switches tabs"]
+        H -->|Paste prompt| E1["Cursor or Claude Code"]
+        E1 -->|Copy plan or questions| H
+        H -->|Paste response| P1
+    end
+
+    subgraph Brokered["With EWB: durable agent handoffs"]
+        direction LR
+        P2["Planning agent"] -->|Typed work order| B["EWB broker"]
+        B -->|Plan-only dispatch| E2["Coding agent"]
+        E2 -->|Receipt or plan packet| B
+        B -->|Auditable return| P2
+    end
+```
+
+## What EWB changes
+
+EWB replaces the manual Markdown shuttle with a deterministic control plane.
+Planning clients submit a decorated Markdown work order through MCP. The broker
+validates it, applies a versioned wrapper, records every handoff in an
+append-only ledger, routes it through the appropriate executor adapter, and
+returns durable receipts and results to the originating planner.
+
+The planner remains responsible for defining and reviewing the work. The coding
+agent remains responsible for repository-aware planning and implementation. EWB
+provides the reliable, inspectable path between them.
 
 ## Prototype boundary
 
