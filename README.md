@@ -54,11 +54,12 @@ same contracts against a real repository.
 
 ## How the relay works
 
-AWR replaces the manual Markdown shuttle with a deterministic control plane.
-Planning clients submit a decorated Markdown work order through MCP. The broker
-validates it, applies a versioned wrapper, records every handoff in an
-append-only ledger, routes it through the appropriate executor adapter, and
-returns durable receipts and results to the originating planner.
+AWR gives AI agents a direct, dependable way to hand work to one another.
+ChatGPT or Claude can send a feature request or refinement to the right coding
+agent without asking a human to download a file, switch tools, or copy and
+paste the response back. AWR keeps track of what was sent, where it went, and
+what came back—so people can focus on reviewing decisions and approving work
+instead of acting as the courier.
 
 The planner remains responsible for defining and reviewing the work. The coding
 agent remains responsible for repository-aware planning and implementation. AWR
