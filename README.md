@@ -25,24 +25,31 @@ context, route work to the wrong repository or session, duplicate a run, or
 forget exactly what was sent and received. There is no dependable receipt chain
 or general ledger for the work moving between agents.
 
-```mermaid
-flowchart TB
-    subgraph Manual["Today: the human is the integration layer"]
-        direction LR
-        P1["ChatGPT or Claude"] -->|Copy specification| H["Human switches tabs"]
-        H -->|Paste prompt| E1["Cursor or Claude Code"]
-        E1 -->|Copy plan or questions| H
-        H -->|Paste response| P1
-    end
+EWB removes the human from the transport loop while preserving human review and
+approval. The target prompt-to-plan handoff is intentionally small and
+explicit:
 
-    subgraph Brokered["With EWB: durable agent handoffs"]
-        direction LR
-        P2["Planning agent"] -->|Typed work order| B["EWB broker"]
-        B -->|Plan-only dispatch| E2["Coding agent"]
-        E2 -->|Receipt or plan packet| B
-        B -->|Auditable return| P2
-    end
+```mermaid
+sequenceDiagram
+    participant P as ChatGPT
+    participant B as Work Broker
+    participant L as Receipt Ledger
+    participant C as Cursor Agent
+
+    P->>B: Submit Markdown work order
+    B->>L: Record prompt received
+    B-->>P: Acceptance receipt
+    B->>C: Dispatch in planning mode
+    C-->>B: Agent and run acknowledgement
+    B->>L: Record dispatch receipt
+    C->>B: Structured planning result
+    B->>L: Record plan receipt
+    B-->>P: Plan available for review
 ```
+
+The current scaffold implements the sequence through agent/run acknowledgement.
+Structured plan capture and return to the originating planner is the next
+milestone.
 
 ## What EWB changes
 
