@@ -18,7 +18,6 @@ from awr.responses.canonical import canonical_json, fingerprint_bytes
 from awr.responses.contracts import POLICY_VERSION
 from awr.service import BrokerService
 from awr.storage.sqlite import SQLiteStateStore
-from awr.transports.http_cache import cached_json, no_store_json
 
 FEATURE = """@awr feature.plan
 
@@ -128,6 +127,8 @@ class CacheKeyContractTests(unittest.TestCase):
     def test_cached_json_fingerprints_before_optional_gzip(self) -> None:
         try:
             from starlette.requests import Request
+
+            from awr.transports.http_cache import cached_json, no_store_json
         except ImportError:
             self.skipTest("hosted extra is required")
         payload = {"note": "x" * 600}

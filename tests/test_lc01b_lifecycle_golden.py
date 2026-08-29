@@ -134,8 +134,12 @@ class LifecycleGoldenPathTests(unittest.TestCase):
             target_kind="completion",
         )
         self.assertEqual(accepted["status"], WorkStatus.COMPLETE.value)
-        self.assertEqual(self.harness.projection(work_order_id)["status"], WorkStatus.COMPLETE.value)
-        self.assertIn("plan.completed", [entry.event_type for entry in self.store_events(work_order_id)])
+        self.assertEqual(
+            self.harness.projection(work_order_id)["status"], WorkStatus.COMPLETE.value
+        )
+        self.assertIn(
+            "plan.completed", [entry.event_type for entry in self.store_events(work_order_id)]
+        )
         _ = markdown
         _ = packet
         _ = PLAN_BODY

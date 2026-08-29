@@ -247,8 +247,10 @@ class _FirestoreWorkOrderSession:
         return self._store._work_order_ref(self._work_order.work_order_id).collection("decisions")
 
     def _lifecycle_ref(self) -> Any:
-        return self._store._work_order_ref(self._work_order.work_order_id).collection("lifecycle").document(
-            "snapshot"
+        return (
+            self._store._work_order_ref(self._work_order.work_order_id)
+            .collection("lifecycle")
+            .document("snapshot")
         )
 
     def _load_lifecycle(self) -> dict[str, Any] | None:
@@ -313,7 +315,10 @@ class _FirestoreWorkOrderSession:
             ):
                 packet = data.get("packet")
                 if isinstance(packet, dict):
-                    return {"packet": packet, "content_sha256": str(data.get("content_sha256") or "")}
+                    return {
+                        "packet": packet,
+                        "content_sha256": str(data.get("content_sha256") or ""),
+                    }
         return None
 
     def put_decision(self, decision: dict[str, Any]) -> None:

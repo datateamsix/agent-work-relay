@@ -158,9 +158,19 @@ def parse_response_markdown(markdown: str) -> ResponsePacket:
     packet: dict[str, Any] = {key: mapping[key] for key in mapping if key not in payload_keys}
     if "evidence_refs" in packet:
         packet["evidence_refs"] = _parse_markdown_evidence(packet["evidence_refs"])
-    payload = {key: mapping[key] for key in payload_keys}
+    payload: dict[str, Any] = {key: mapping[key] for key in payload_keys}
     if "body_sha256" in payload:
         payload["content_sha256"] = payload.pop("body_sha256")
+    for numeric in ("percent", "ledger_sequence"):
+        raw = payload.get(numeric)
+        if isinstance(raw, str) and raw.isdigit():
+            payload[numeric] = int(raw)
+    if (
+        str(packet.get("response_type")) == "execution.acknowledged"
+        and packet.get("executor_run_id")
+        and "executor_run_id" not in payload
+    ):
+        payload["executor_run_id"] = packet["executor_run_id"]
     packet["payload"] = payload
     return parse_response_packet(packet)
 

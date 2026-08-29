@@ -53,13 +53,15 @@ class LifecycleSnapshot:
             work_order_id=str(payload["work_order_id"]),
             source_input_sha256=str(payload["source_input_sha256"]),
             current_parent_id=str(payload["current_parent_id"]),
-            version=int(payload["version"]),
+            version=int(str(payload["version"])),
             participants=frozenset(str(item) for item in participants)
             if isinstance(participants, list)
             else frozenset(),
             plan_id=str(payload["plan_id"]) if payload.get("plan_id") else None,
             plan_sha256=str(payload["plan_sha256"]) if payload.get("plan_sha256") else None,
-            bound_agent_id=str(payload["bound_agent_id"]) if payload.get("bound_agent_id") else None,
+            bound_agent_id=str(payload["bound_agent_id"])
+            if payload.get("bound_agent_id")
+            else None,
             bound_run_id=str(payload["bound_run_id"]) if payload.get("bound_run_id") else None,
             blocked_from=WorkStatus(str(blocked)) if blocked else None,
             execution_acknowledged=bool(payload.get("execution_acknowledged", False)),
@@ -68,7 +70,9 @@ class LifecycleSnapshot:
                 if payload.get("latest_review_outcome")
                 else None
             ),
-            original_lineage=tuple(str(item) for item in lineage) if isinstance(lineage, list) else (),
+            original_lineage=tuple(str(item) for item in lineage)
+            if isinstance(lineage, list)
+            else (),
         )
 
 
@@ -91,7 +95,9 @@ _RESPONSE_EVENT = {
 }
 
 
-def derive_snapshot(work_order_id: str, sender: str, recipient: str, source_input_sha256: str) -> LifecycleSnapshot:
+def derive_snapshot(
+    work_order_id: str, sender: str, recipient: str, source_input_sha256: str
+) -> LifecycleSnapshot:
     return LifecycleSnapshot(
         work_order_id=work_order_id,
         source_input_sha256=source_input_sha256,
@@ -123,7 +129,9 @@ def apply_response(
         raise AuthorityError("Response actor does not match the authenticated participant.")
     event = _RESPONSE_EVENT.get(packet.response_type)
     if event is None:
-        raise TransitionError(f"{packet.response_type.value} is not an operational lifecycle response.")
+        raise TransitionError(
+            f"{packet.response_type.value} is not an operational lifecycle response."
+        )
     target = _response_target(status, event, packet)
     plan_id = snapshot.plan_id
     plan_sha256 = snapshot.plan_sha256
@@ -190,16 +198,20 @@ def apply_broker_event(
     _assert_actor(actor, snapshot)
     _assert_version(snapshot, expected_version)
     if event is LifecycleEvent.PLAN_EXECUTE:
+        if snapshot.plan_id and plan_id and plan_id != snapshot.plan_id:
+            raise AuthorityError("Approval for one plan fingerprint cannot authorize another.")
+        if snapshot.plan_sha256 and plan_sha256 and plan_sha256 != snapshot.plan_sha256:
+            raise AuthorityError("Approval for one plan fingerprint cannot authorize another.")
         matching_plan_approval(
             decisions,
             plan_id=plan_id or snapshot.plan_id or "",
             plan_sha256=plan_sha256 or snapshot.plan_sha256 or "",
         )
+    if event is LifecycleEvent.IMPLEMENTATION_REFINE:
         if snapshot.plan_id and plan_id and plan_id != snapshot.plan_id:
             raise AuthorityError("Approval for one plan fingerprint cannot authorize another.")
         if snapshot.plan_sha256 and plan_sha256 and plan_sha256 != snapshot.plan_sha256:
             raise AuthorityError("Approval for one plan fingerprint cannot authorize another.")
-    if event is LifecycleEvent.IMPLEMENTATION_REFINE:
         matching_plan_approval(
             decisions,
             plan_id=plan_id or snapshot.plan_id or "",
@@ -218,7 +230,9 @@ def apply_broker_event(
             version=snapshot.version + 1,
             blocked_from=None,
         )
-        return TransitionResult(status=target, snapshot=updated, event=event, ledger_event=event.value)
+        return TransitionResult(
+            status=target, snapshot=updated, event=event, ledger_event=event.value
+        )
     target = next_state(status, event)
     updated = replace(
         snapshot,
@@ -255,18 +269,18 @@ def apply_decision(
             raise AuthorityError("approve_plan requires a stored approve_plan decision.")
         if not snapshot.plan_id or not snapshot.plan_sha256:
             raise AuthorityError("A plan packet must exist before it can be approved.")
-        if (
-            decision.target_id != snapshot.plan_id
-            or decision.target_sha256.removeprefix("sha256:")
-            != snapshot.plan_sha256.removeprefix("sha256:")
-        ):
+        if decision.target_id != snapshot.plan_id or decision.target_sha256.removeprefix(
+            "sha256:"
+        ) != snapshot.plan_sha256.removeprefix("sha256:"):
             raise AuthorityError("Approval for one plan fingerprint cannot authorize another.")
     target = next_state(status, event)
     updated = replace(snapshot, version=snapshot.version + 1)
     return TransitionResult(status=target, snapshot=updated, event=event, ledger_event=event.value)
 
 
-def _response_target(status: WorkStatus, event: LifecycleEvent, packet: ResponsePacket) -> WorkStatus:
+def _response_target(
+    status: WorkStatus, event: LifecycleEvent, packet: ResponsePacket
+) -> WorkStatus:
     if status.terminal:
         raise TransitionError(f"Terminal state {status.value} accepts no responses.")
     if event is LifecycleEvent.REVIEW_COMPLETED:

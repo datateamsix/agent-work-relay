@@ -108,6 +108,28 @@ class CollectionReference:
     def order_by(self, field: str) -> Query:
         return Query(self, field)
 
+    def stream(self, transaction: InMemoryTransaction | None = None) -> Iterator[DocumentSnapshot]:
+        prefix = self._path
+        source = transaction._overlay if transaction is not None else None
+        with self._client._lock:
+            items: list[DocumentSnapshot] = []
+            paths = set(self._client._docs)
+            if source is not None:
+                paths.update(source)
+            for path in paths:
+                if len(path) != len(prefix) + 1 or path[: len(prefix)] != prefix:
+                    continue
+                data = None
+                if source is not None and path in source:
+                    data = source[path]
+                else:
+                    data = self._client._docs.get(path)
+                if data is None:
+                    continue
+                items.append(DocumentSnapshot(path, data))
+            items.sort(key=lambda snap: snap.id)
+            return iter(items)
+
 
 class InMemoryTransaction:
     def __init__(self, client: InMemoryFirestore) -> None:

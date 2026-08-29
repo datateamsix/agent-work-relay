@@ -4,11 +4,16 @@ import hashlib
 import tempfile
 from pathlib import Path
 
+from awr.artifacts.contracts import ArtifactPurpose, ArtifactReference
 from awr.contracts import WorkStatus
 from awr.executors.recording_cursor import RecordingCursorExecutor
-from awr.artifacts.contracts import ArtifactPurpose, ArtifactReference
 from awr.responses.canonical import fingerprint_packet
-from awr.responses.contracts import RESPONSE_AUTHORITY, RESPONSE_SCHEMA, ResponsePacket, ResponseType
+from awr.responses.contracts import (
+    RESPONSE_AUTHORITY,
+    RESPONSE_SCHEMA,
+    ResponsePacket,
+    ResponseType,
+)
 from awr.responses.render import render_response_markdown
 from awr.responses.validate import parse_response_markdown
 from awr.service import BrokerService
@@ -87,7 +92,9 @@ class LifecycleHarness:
                     byte_length=int(item["byte_length"]),
                     sha256=str(item["sha256"]),
                     detected_media_type=(
-                        str(item["detected_media_type"]) if item.get("detected_media_type") else None
+                        str(item["detected_media_type"])
+                        if item.get("detected_media_type")
+                        else None
                     ),
                     safe_filename=str(item["safe_filename"]),
                 )
@@ -106,7 +113,7 @@ class LifecycleHarness:
             evidence_refs=refs,
             message_id=None,
             executor_run_id=executor_run_id,
-            actor=actor,
+            actor=None,
         )
         markdown = render_response_markdown(packet)
         if extra_frontmatter:

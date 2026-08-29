@@ -9,7 +9,12 @@ from awr.lifecycle.errors import AuthorityError, LineageError, TransitionError
 from awr.lifecycle.events import LifecycleEvent
 from awr.lifecycle.kernel import apply_broker_event, apply_decision, apply_response, derive_snapshot
 from awr.lifecycle.transitions import CANCELLABLE, TRANSITION_TABLE, allowed_events, next_state
-from awr.responses.contracts import RESPONSE_AUTHORITY, RESPONSE_SCHEMA, ResponsePacket, ResponseType
+from awr.responses.contracts import (
+    RESPONSE_AUTHORITY,
+    RESPONSE_SCHEMA,
+    ResponsePacket,
+    ResponseType,
+)
 
 SOURCE = "a" * 64
 PLAN_SHA = "b" * 64
@@ -79,7 +84,10 @@ class MinimizedTransitionTests(unittest.TestCase):
             (WorkStatus.REVISION_REQUIRED, LifecycleEvent.IMPLEMENTATION_REFINE),
         }
         self.assertEqual(set(TRANSITION_TABLE), expected)
-        self.assertEqual(next_state(WorkStatus.READY_FOR_EXECUTION, LifecycleEvent.PLAN_EXECUTE), WorkStatus.EXECUTION_DISPATCHED)
+        self.assertEqual(
+            next_state(WorkStatus.READY_FOR_EXECUTION, LifecycleEvent.PLAN_EXECUTE),
+            WorkStatus.EXECUTION_DISPATCHED,
+        )
         self.assertNotIn(
             (WorkStatus.READY_FOR_EXECUTION, LifecycleEvent.EXECUTION_ACKNOWLEDGED),
             TRANSITION_TABLE,
@@ -101,15 +109,19 @@ class MinimizedTransitionTests(unittest.TestCase):
             (WorkStatus.CANCELLED, LifecycleEvent.CANCEL),
         ]
         for status, event in forbidden:
-            with self.subTest(status=status, event=event):
-                with self.assertRaises(TransitionError):
-                    next_state(status, event)
+            with self.subTest(status=status, event=event), self.assertRaises(TransitionError):
+                next_state(status, event)
 
     def test_cancel_is_a_family_rule(self) -> None:
         for status in CANCELLABLE:
             self.assertEqual(next_state(status, LifecycleEvent.CANCEL), WorkStatus.CANCELLED)
             self.assertIn(LifecycleEvent.CANCEL, allowed_events(status))
-        for status in (WorkStatus.COMPLETE, WorkStatus.FAILED, WorkStatus.CANCELLED, WorkStatus.ACCEPTED):
+        for status in (
+            WorkStatus.COMPLETE,
+            WorkStatus.FAILED,
+            WorkStatus.CANCELLED,
+            WorkStatus.ACCEPTED,
+        ):
             with self.assertRaises(TransitionError):
                 next_state(status, LifecycleEvent.CANCEL)
 
@@ -180,7 +192,11 @@ class KernelGuardTests(unittest.TestCase):
             apply_response(
                 status=WorkStatus.PLANNING,
                 snapshot=snapshot,
-                packet=_packet(ResponseType.PLAN_COMPLETED, {"content": "x", "content_sha256": "d" * 64}, actor="intruder"),
+                packet=_packet(
+                    ResponseType.PLAN_COMPLETED,
+                    {"content": "x", "content_sha256": "d" * 64},
+                    actor="intruder",
+                ),
                 actor="intruder",
                 decisions=(),
             )

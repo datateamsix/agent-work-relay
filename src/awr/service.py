@@ -464,7 +464,9 @@ class BrokerService:
         try:
             with self.store.lock_work_order(packet.work_order_id) as session:
                 snapshot = self._snapshot_from_session(session, work_order)
-                decisions = tuple(StoredDecision.from_dict(item) for item in session.list_decisions())
+                decisions = tuple(
+                    StoredDecision.from_dict(item) for item in session.list_decisions()
+                )
                 existing = session.get_response_by_idempotency(
                     resolved, packet.response_type.value, packet.idempotency_key
                 )
@@ -649,7 +651,9 @@ class BrokerService:
         except LifecycleError as exc:
             raise WorkOrderValidationError(str(exc)) from exc
 
-    def request_plan_approval(self, work_order_id: str, *, actor: str | None = None) -> dict[str, Any]:
+    def request_plan_approval(
+        self, work_order_id: str, *, actor: str | None = None
+    ) -> dict[str, Any]:
         return self._apply_broker(
             work_order_id,
             LifecycleEvent.PLAN_APPROVAL_REQUESTED,
@@ -727,7 +731,9 @@ class BrokerService:
         try:
             with self.store.lock_work_order(work_order_id) as session:
                 snapshot = self._snapshot_from_session(session, work_order)
-                decisions = tuple(StoredDecision.from_dict(item) for item in session.list_decisions())
+                decisions = tuple(
+                    StoredDecision.from_dict(item) for item in session.list_decisions()
+                )
                 result = apply_broker_event(
                     status=session.get_work_order().status,
                     snapshot=snapshot,
@@ -770,20 +776,22 @@ class BrokerService:
             work_order.content_sha256,
         )
 
-    def _validate_evidence(
-        self, work_order: WorkOrder, packet: ResponsePacket, actor: str
-    ) -> None:
+    def _validate_evidence(self, work_order: WorkOrder, packet: ResponsePacket, actor: str) -> None:
         if not packet.evidence_refs:
             return
         artifacts = self._require_artifacts()
         for reference in packet.evidence_refs:
             current = artifacts.metadata.get(reference.artifact_id)
             if current is None:
-                raise WorkOrderValidationError(f"Unknown evidence artifact: {reference.artifact_id}")
+                raise WorkOrderValidationError(
+                    f"Unknown evidence artifact: {reference.artifact_id}"
+                )
             if current.status is not ArtifactStatus.CLEAN:
                 raise WorkOrderValidationError("Evidence artifacts must be CLEAN.")
             if current.owner not in {work_order.sender, actor}:
-                raise WorkOrderValidationError("Evidence artifact owner does not match the work order.")
+                raise WorkOrderValidationError(
+                    "Evidence artifact owner does not match the work order."
+                )
             if current.sha256 and current.sha256 != reference.sha256:
                 raise WorkOrderValidationError("Evidence artifact fingerprint does not match.")
 

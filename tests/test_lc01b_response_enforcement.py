@@ -12,6 +12,7 @@ from awr.artifacts.scan import CleanScanner
 from awr.artifacts.security import ArtifactSecurityService
 from awr.artifacts.service import ArtifactService
 from awr.contracts import WorkStatus
+from awr.decorators import DirectiveError
 from awr.executors.recording_cursor import RecordingCursorExecutor
 from awr.responses.canonical import ResponsePacketError
 from awr.responses.contracts import ResponseType
@@ -35,7 +36,7 @@ class ResponseEnforcementTests(unittest.TestCase):
 
     def test_lc01a_displayed_completion_is_rejected(self) -> None:
         markdown = FIXTURE.read_text(encoding="utf-8")
-        with self.assertRaises(Exception):
+        with self.assertRaises((ResponsePacketError, DirectiveError)):
             parse_response_markdown(markdown)
         with self.assertRaises(WorkOrderValidationError):
             self.harness.service.submit_response(markdown=markdown, actor=RECIPIENT)
@@ -244,7 +245,7 @@ class EvidenceEnforcementTests(unittest.TestCase):
             "byte_length": current.byte_length,
             "sha256": current.sha256,
             "detected_media_type": current.detected_media_type,
-            "safe_filename": current.safe_filename,
+            "safe_filename": current.original_filename,
         }
 
     def test_wrong_owner_evidence_is_rejected(self) -> None:
@@ -278,6 +279,7 @@ class EvidenceEnforcementTests(unittest.TestCase):
                     }
                 ],
             )
+
 
 if __name__ == "__main__":
     unittest.main()

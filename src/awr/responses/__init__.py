@@ -40,9 +40,9 @@ __all__ = [
     "parse_response_markdown",
     "parse_response_packet",
     "provider_run_cache_key",
+    "render_response_markdown",
     "replay_cache_key",
     "response_idempotency_cache_key",
-    "render_response_markdown",
     "response_packet_cache_key",
     "security_receipt_cache_key",
 ]

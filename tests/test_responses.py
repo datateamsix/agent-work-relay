@@ -90,6 +90,19 @@ class ResponseContractTests(unittest.TestCase):
             response_packet_cache_key(canonical_sha256=packet.content_sha256 or ""),
         )
 
+    def test_execution_acknowledged_render_round_trip(self) -> None:
+        packet = parse_response_packet(
+            _base(
+                response_type="execution.acknowledged",
+                executor_run_id="run-1",
+                payload={"executor": "cursor:cloud", "executor_run_id": "run-1"},
+            )
+        )
+        rendered = parse_response_markdown(render_response_markdown(packet))
+        self.assertEqual(rendered.response_type, ResponseType.EXECUTION_ACKNOWLEDGED)
+        self.assertEqual(rendered.payload["executor_run_id"], "run-1")
+        self.assertEqual(rendered.content_sha256, fingerprint_packet(rendered))
+
     def test_execution_completed_render_round_trip(self) -> None:
         packet = parse_response_packet(
             _base(response_type="execution.completed", payload={"summary": "Done"})
