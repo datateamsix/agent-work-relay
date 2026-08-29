@@ -39,8 +39,9 @@ network hiding.
 6. Security headers: `nosniff`, `DENY` framing, `no-referrer`, empty
    permissions policy, restrictive CSP. Production adds HSTS.
 7. DNS-rebinding protection is on in production (`allowed_hosts`).
-8. Production does not attach a local-disk artifact store. Artifact tools fail
-   closed until GCS is configured (`AWR_ARTIFACT_STORAGE=gcs`).
+8. Production does not attach a local-disk artifact store. `AWR_ARTIFACT_STORAGE=gcs`
+   fails closed until AWR-AS-04 ships a real GCS adapter. Artifact tools stay
+   disabled in production until then.
 9. Logs redact tokens, upload tickets, signed URLs, and raw prompts.
 
 `--allow-unauthenticated` on Cloud Run means **the load balancer accepts TCP**.

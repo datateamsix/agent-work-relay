@@ -11,6 +11,7 @@ from .executors.base import PlanningExecutor
 from .executors.cursor_cloud import CursorCloudExecutor
 from .executors.recording_cursor import RecordingCursorExecutor
 from .service import BrokerService
+from .settings import SettingsError
 from .storage.artifact_fs import LocalArtifactBodyStore
 from .storage.artifact_sqlite import SQLiteArtifactMetadataStore
 from .storage.base import StateStore
@@ -44,7 +45,12 @@ def build_artifact_relay(
 ) -> ArtifactRelay | None:
     env = (os.getenv("AWR_ENV", "local") or "local").lower()
     backend = (os.getenv("AWR_ARTIFACT_STORAGE", "local") or "local").lower()
-    if env == "production" and backend != "gcs":
+    if backend == "gcs":
+        raise SettingsError(
+            "AWR_ARTIFACT_STORAGE=gcs is not implemented. Production must omit "
+            "this setting so artifact intake stays disabled until AWR-AS-04."
+        )
+    if env == "production":
         return None
     sqlite_path = Path(
         db_path if db_path is not None else os.getenv("AWR_SQLITE_PATH", ".awr/awr.db")

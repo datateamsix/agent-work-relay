@@ -22,7 +22,6 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PROJECT_ID="${PROJECT_ID:-modelready-m3}"
-PROJECT_NUMBER="${PROJECT_NUMBER:-912257136465}"
 REGION="${REGION:-us-central1}"
 SERVICE="${SERVICE:-agent-work-relay}"
 RUNTIME_SA="${RUNTIME_SA:-awr-runtime@${PROJECT_ID}.iam.gserviceaccount.com}"
@@ -184,9 +183,10 @@ authenticate() {
 
 select_project() {
   gcloud config set project "${PROJECT_ID}" >/dev/null
-  gcloud projects describe "${PROJECT_ID}" --format='value(projectId)' >/dev/null \
-    || die "Cannot read project ${PROJECT_ID}. Check that this account has access."
-  log "Using project ${PROJECT_ID} (${PROJECT_NUMBER}) in ${REGION}"
+  local project_number
+  project_number="$(gcloud projects describe "${PROJECT_ID}" --format='value(projectNumber)' 2>/dev/null || true)"
+  [[ -n "${project_number}" ]] || die "Cannot read project ${PROJECT_ID}. Check that this account has access."
+  log "Using project ${PROJECT_ID} (${project_number}) in ${REGION}"
 }
 
 prompt_issuer() {
@@ -270,16 +270,8 @@ deploy_revision() {
 }
 
 import_indexes() {
-  log "Importing Firestore composite indexes"
-  if gcloud firestore indexes composite import \
-    --source "${ROOT}/deploy/firestore.indexes.json" \
-    --project "${PROJECT_ID}" \
-    --quiet >/dev/null 2>&1; then
-    log "Firestore index import accepted (builds asynchronously)."
-    return 0
-  fi
-  warn "Index import failed or is unavailable. Create them later with:"
-  warn "  gcloud firestore indexes composite import --source deploy/firestore.indexes.json"
+  log "Applying Firestore indexes and field exemptions"
+  PROJECT_ID="${PROJECT_ID}" "${ROOT}/deploy/apply_firestore_indexes.sh"
 }
 
 smoke_public() {

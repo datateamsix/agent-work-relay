@@ -10,7 +10,7 @@ from awr.auth.hardening import SlidingWindowLimiter
 from awr.auth.tokens import AuthError, TokenVerifier
 from awr.factory import build_artifact_relay
 from awr.observability import _redact_value
-from awr.settings import Settings
+from awr.settings import Settings, SettingsError
 
 try:
     import jwt
@@ -152,6 +152,15 @@ class HardeningUnitTests(unittest.TestCase):
         env = {"AWR_ENV": "production", "AWR_ARTIFACT_STORAGE": "local"}
         with patch.dict(os.environ, env, clear=False):
             self.assertIsNone(build_artifact_relay())
+
+    def test_gcs_flag_does_not_enable_local_disk(self) -> None:
+        for env_name in ("production", "local"):
+            env = {"AWR_ENV": env_name, "AWR_ARTIFACT_STORAGE": "gcs"}
+            with self.subTest(env=env_name):
+                with patch.dict(os.environ, env, clear=False):
+                    with self.assertRaises(SettingsError) as caught:
+                        build_artifact_relay()
+                    self.assertIn("not implemented", str(caught.exception))
 
     def test_logs_redact_upload_tokens(self) -> None:
         self.assertEqual(_redact_value("upload_token", "ticket-secret"), "[REDACTED]")

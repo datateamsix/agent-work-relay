@@ -6,6 +6,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "scripts" / "provision_cloud_run.sh"
+SETUP = ROOT / "deploy" / "gcp_setup.sh"
+INDEXES = ROOT / "deploy" / "apply_firestore_indexes.sh"
 
 
 class ProvisionScriptTests(unittest.TestCase):
@@ -20,6 +22,25 @@ class ProvisionScriptTests(unittest.TestCase):
         self.assertIn("--issuer", help_text)
         self.assertIn("CURSOR_API_KEY_FILE", help_text)
         self.assertNotIn("AWR_STATIC_TOKEN", help_text)
+
+    def test_deploy_helpers_parse_and_avoid_invalid_firestore_import(self) -> None:
+        for path in (SETUP, INDEXES, SCRIPT):
+            self.assertTrue(path.is_file(), path)
+            parsed = subprocess.run(
+                ["bash", "-n", str(path)], check=False, capture_output=True, text=True
+            )
+            self.assertEqual(parsed.returncode, 0, parsed.stderr)
+            text = path.read_text(encoding="utf-8")
+            self.assertNotIn("indexes composite import", text)
+            self.assertNotIn("912257136465", text)
+        setup = SETUP.read_text(encoding="utf-8")
+        self.assertIn('gcloud projects describe "${PROJECT_ID}" --format=\'value(projectNumber)\'', setup)
+        self.assertNotIn("roles/run.admin", setup)
+        self.assertNotIn("compute@developer.gserviceaccount.com", setup)
+        self.assertIn("artifacts repositories add-iam-policy-binding", setup)
+        indexes = INDEXES.read_text(encoding="utf-8")
+        self.assertIn("indexes composite create", indexes)
+        self.assertIn("indexes fields update", indexes)
 
     def test_unknown_flag_fails_closed(self) -> None:
         result = subprocess.run(

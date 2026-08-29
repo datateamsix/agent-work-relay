@@ -183,7 +183,7 @@ export AWR_OAUTH_AUDIENCE=https://YOUR-SERVICE-URL/mcp
 export AWR_PUBLIC_BASE_URL=https://YOUR-SERVICE-URL
 export AWR_ALLOWED_HOSTS=YOUR-SERVICE-HOST
 ./deploy/gcp_deploy.sh
-gcloud firestore indexes composite import --source deploy/firestore.indexes.json
+./deploy/apply_firestore_indexes.sh
 ```
 
 Runtime identity: `awr-runtime@modelready-m3.iam.gserviceaccount.com`.

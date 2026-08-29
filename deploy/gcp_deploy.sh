@@ -6,6 +6,7 @@ set -euo pipefail
 PROJECT_ID="${PROJECT_ID:-modelready-m3}"
 REGION="${REGION:-us-central1}"
 SERVICE="${SERVICE:-agent-work-relay}"
+IMAGE_REPO="${IMAGE_REPO:-awr}"
 RUNTIME_SA="${RUNTIME_SA:-awr-runtime@${PROJECT_ID}.iam.gserviceaccount.com}"
 CURSOR_SECRET="${CURSOR_SECRET:-awr-cursor-api-key}"
 PUBLIC_BASE_URL="${AWR_PUBLIC_BASE_URL:-}"
@@ -37,12 +38,17 @@ if [[ -n "${ALLOWED_HOSTS}" ]]; then
   ENV_VARS="${ENV_VARS},AWR_ALLOWED_HOSTS=${ALLOWED_HOSTS}"
 fi
 
+IMAGE="${REGION}-docker.pkg.dev/${PROJECT_ID}/${IMAGE_REPO}/${SERVICE}"
+echo "Building ${IMAGE}"
+gcloud builds submit "${ROOT}" --tag "${IMAGE}" --project "${PROJECT_ID}"
+
 # Network reachability is public so ChatGPT can complete OAuth and call /mcp.
 # Application authentication is still required: /mcp and state-bearing routes
 # reject missing, invalid, expired, wrong-issuer, and insufficient-scope tokens.
 # Do not treat --allow-unauthenticated as an unauthenticated MCP server.
+# The operator identity deploys this service. Cloud Build only pushes the image.
 gcloud run deploy "${SERVICE}" \
-  --source "${ROOT}" \
+  --image "${IMAGE}" \
   --region "${REGION}" \
   --project "${PROJECT_ID}" \
   --service-account "${RUNTIME_SA}" \
