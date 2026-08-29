@@ -123,6 +123,13 @@ class FirestoreStateStore:
             return None
         return _doc_to_work_order(snapshot.to_dict())
 
+    def list_work_orders(self) -> list[WorkOrder]:
+        orders: list[WorkOrder] = []
+        for snapshot in self._client.collection(WORK_ORDERS).stream():
+            data = snapshot.to_dict() or {}
+            orders.append(_doc_to_work_order(data))
+        return orders
+
     def get_by_idempotency_key(self, idempotency_key: str) -> WorkOrder | None:
         snapshot = self._idempotency_ref(idempotency_key).get()
         if not snapshot.exists:
@@ -305,7 +312,12 @@ class _FirestoreWorkOrderSession:
                 and item.get("response_type") == response_type
                 and item.get("idempotency_key") == idempotency_key
             ):
-                return {"packet": item["packet"], "content_sha256": item["content_sha256"]}
+                receipt = item.get("receipt")
+                return {
+                    "packet": item["packet"],
+                    "content_sha256": item["content_sha256"],
+                    "receipt": receipt if isinstance(receipt, dict) else None,
+                }
         for snapshot in self._responses_collection().stream():
             data = snapshot.to_dict() or {}
             if (
@@ -315,9 +327,11 @@ class _FirestoreWorkOrderSession:
             ):
                 packet = data.get("packet")
                 if isinstance(packet, dict):
+                    receipt = data.get("receipt")
                     return {
                         "packet": packet,
                         "content_sha256": str(data.get("content_sha256") or ""),
+                        "receipt": receipt if isinstance(receipt, dict) else None,
                     }
         return None
 
@@ -351,24 +365,45 @@ class _FirestoreWorkOrderSession:
             if not snapshot.exists:
                 raise KeyError(f"Unknown work order: {self._work_order.work_order_id}")
             current_sequence = int(snapshot.get("ledger_sequence"))
-            existing_types = {
-                str(item.to_dict()["event_type"])
+            existing_event_ids = {
+                str(item.to_dict()["event_id"])
                 for item in self._store._ledger_collection(self._work_order.work_order_id)
                 .order_by("sequence")
                 .stream(transaction=transaction)
             }
+            existing_packet_ids = {
+                str(item.id) for item in self._responses_collection().stream(transaction=transaction)
+            }
+            existing_decision_ids = {
+                str(item.id) for item in self._decisions_collection().stream(transaction=transaction)
+            }
             if current_sequence != self._base_sequence:
-                remaining = [
+                remaining_events = [
                     entry
                     for entry in self._pending_entries
-                    if entry.event_type not in existing_types
+                    if entry.event_id not in existing_event_ids
                 ]
-                if not remaining and (
-                    self._pending_status is None
-                    or snapshot.get("status")
-                    == (self._pending_status.value if self._pending_status else None)
-                    or self._pending_status is WorkStatus.PLAN_READY
-                    and snapshot.get("status") == WorkStatus.PLAN_READY.value
+                remaining_packets = [
+                    packet
+                    for packet in self._pending_packets
+                    if str(packet["packet_id"]) not in existing_packet_ids
+                ]
+                remaining_decisions = [
+                    decision
+                    for decision in self._pending_decisions
+                    if str(decision["decision_id"]) not in existing_decision_ids
+                ]
+                if (
+                    not remaining_events
+                    and not remaining_packets
+                    and not remaining_decisions
+                    and (
+                        self._pending_status is None
+                        or snapshot.get("status")
+                        == (self._pending_status.value if self._pending_status else None)
+                        or self._pending_status is WorkStatus.PLAN_READY
+                        and snapshot.get("status") == WorkStatus.PLAN_READY.value
+                    )
                 ):
                     return
                 raise RuntimeError(

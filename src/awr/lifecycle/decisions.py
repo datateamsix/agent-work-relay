@@ -1,10 +1,28 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Any
 
+from awr.responses.canonical import canonical_json, fingerprint_bytes
+
 from .errors import AuthorityError
+
+MAX_DECISION_RATIONALE_BYTES = 512
+_FINGERPRINT_FIELDS = (
+    "decision_type",
+    "work_order_id",
+    "actor",
+    "target_kind",
+    "target_id",
+    "target_sha256",
+    "permitted_action",
+    "scope",
+    "idempotency_key",
+    "rationale",
+    "expires_at",
+)
 
 
 class DecisionType(StrEnum):
@@ -39,6 +57,8 @@ class StoredDecision:
     scope: str
     created_at: str
     idempotency_key: str
+    rationale: str
+    expires_at: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -53,10 +73,13 @@ class StoredDecision:
             "scope": self.scope,
             "created_at": self.created_at,
             "idempotency_key": self.idempotency_key,
+            "rationale": self.rationale,
+            "expires_at": self.expires_at,
         }
 
     @classmethod
     def from_dict(cls, payload: dict[str, Any]) -> StoredDecision:
+        expires = payload.get("expires_at")
         return cls(
             decision_id=str(payload["decision_id"]),
             decision_type=DecisionType(str(payload["decision_type"])),
@@ -69,7 +92,39 @@ class StoredDecision:
             scope=str(payload["scope"]),
             created_at=str(payload["created_at"]),
             idempotency_key=str(payload["idempotency_key"]),
+            rationale=str(payload.get("rationale") or ""),
+            expires_at=None if expires in (None, "") else str(expires),
         )
+
+
+def require_rationale(rationale: str) -> str:
+    text = rationale.strip()
+    if not text:
+        raise AuthorityError("A compact decision rationale is required.")
+    if len(text.encode("utf-8")) > MAX_DECISION_RATIONALE_BYTES:
+        raise AuthorityError(
+            f"Decision rationale exceeds the {MAX_DECISION_RATIONALE_BYTES} byte compact limit."
+        )
+    return text
+
+
+def decision_is_expired(decision: StoredDecision, *, now: datetime | None = None) -> bool:
+    if not decision.expires_at:
+        return False
+    raw = decision.expires_at
+    parsed = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=UTC)
+    clock = now or datetime.now(UTC)
+    return parsed <= clock
+
+
+def fingerprint_decision(decision: StoredDecision | dict[str, Any]) -> str:
+    payload = decision.to_dict() if isinstance(decision, StoredDecision) else dict(decision)
+    body: dict[str, Any] = {key: payload.get(key) for key in _FINGERPRINT_FIELDS}
+    if body.get("target_sha256") is not None:
+        body["target_sha256"] = str(body["target_sha256"]).removeprefix("sha256:")
+    return fingerprint_bytes(canonical_json(body))
 
 
 def matching_plan_approval(
@@ -86,6 +141,7 @@ def matching_plan_approval(
         and decision.target_kind is DecisionTargetKind.PLAN
         and decision.target_id == plan_id
         and decision.target_sha256.removeprefix("sha256:") == digest
+        and not decision_is_expired(decision)
     ]
     if not matches:
         raise AuthorityError(

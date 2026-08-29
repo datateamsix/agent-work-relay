@@ -52,6 +52,7 @@ class LifecycleGoldenPathTests(unittest.TestCase):
             target_sha256=str(lifecycle["plan_sha256"]),
             idempotency_key="approve-plan-1",
             permitted_action="plan.execute",
+            rationale="Approve the stored plan fingerprint.",
         )
         self.assertEqual(approved["status"], WorkStatus.READY_FOR_EXECUTION.value)
 
@@ -132,6 +133,7 @@ class LifecycleGoldenPathTests(unittest.TestCase):
             idempotency_key="accept-1",
             permitted_action="close",
             target_kind="completion",
+            rationale="Accept the completion packet.",
         )
         self.assertEqual(accepted["status"], WorkStatus.COMPLETE.value)
         self.assertEqual(

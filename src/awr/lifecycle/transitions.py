@@ -9,7 +9,7 @@ from .events import LifecycleEvent
 # REVIEW_COMPLETED and QUESTION_ANSWER are resolved in the kernel.
 TRANSITION_TABLE: dict[tuple[WorkStatus, LifecycleEvent], WorkStatus] = {
     (WorkStatus.PLANNING, LifecycleEvent.PLAN_COMPLETED): WorkStatus.PLAN_READY,
-    (WorkStatus.PLANNING, LifecycleEvent.QUESTION_BLOCKED): WorkStatus.WAITING_FOR_HUMAN_REVIEW,
+    (WorkStatus.PLANNING, LifecycleEvent.QUESTION_BLOCKED): WorkStatus.WAITING_FOR_INPUT,
     (
         WorkStatus.PLAN_READY,
         LifecycleEvent.PLAN_APPROVAL_REQUESTED,
@@ -27,7 +27,7 @@ TRANSITION_TABLE: dict[tuple[WorkStatus, LifecycleEvent], WorkStatus] = {
     (WorkStatus.EXECUTING, LifecycleEvent.EXECUTION_PROGRESS): WorkStatus.EXECUTING,
     (WorkStatus.EXECUTING, LifecycleEvent.EXECUTION_COMPLETED): WorkStatus.COMPLETION_READY,
     (WorkStatus.EXECUTING, LifecycleEvent.EXECUTION_FAILED): WorkStatus.FAILED,
-    (WorkStatus.EXECUTING, LifecycleEvent.QUESTION_BLOCKED): WorkStatus.WAITING_FOR_HUMAN_REVIEW,
+    (WorkStatus.EXECUTING, LifecycleEvent.QUESTION_BLOCKED): WorkStatus.WAITING_FOR_INPUT,
     (WorkStatus.COMPLETION_READY, LifecycleEvent.COMPLETION_REVIEW): WorkStatus.PLANNER_REVIEWING,
     (WorkStatus.PLANNER_REVIEWING, LifecycleEvent.REVIEW_COMPLETED): WorkStatus.PLANNER_REVIEWING,
     (
@@ -39,9 +39,9 @@ TRANSITION_TABLE: dict[tuple[WorkStatus, LifecycleEvent], WorkStatus] = {
         LifecycleEvent.REQUEST_REVISION,
     ): WorkStatus.REVISION_REQUIRED,
     (
-        WorkStatus.WAITING_FOR_HUMAN_REVIEW,
+        WorkStatus.WAITING_FOR_INPUT,
         LifecycleEvent.QUESTION_ANSWER,
-    ): WorkStatus.WAITING_FOR_HUMAN_REVIEW,
+    ): WorkStatus.WAITING_FOR_INPUT,
     (
         WorkStatus.REVISION_REQUIRED,
         LifecycleEvent.IMPLEMENTATION_REFINE,
@@ -66,6 +66,7 @@ CANCELLABLE = frozenset(
         WorkStatus.PLANNER_REVIEWING,
         WorkStatus.REVISION_REQUIRED,
         WorkStatus.WAITING_FOR_HUMAN_REVIEW,
+        WorkStatus.WAITING_FOR_INPUT,
     }
 )
 

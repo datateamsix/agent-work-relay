@@ -74,6 +74,7 @@ CREATE TABLE IF NOT EXISTS response_packets (
     in_reply_to TEXT NOT NULL,
     source_input_sha256 TEXT NOT NULL,
     packet_json TEXT NOT NULL,
+    receipt_json TEXT,
     created_at TEXT NOT NULL,
     UNIQUE (actor, response_type, idempotency_key),
     FOREIGN KEY (work_order_id) REFERENCES work_orders(work_order_id)
@@ -90,6 +91,10 @@ CREATE TABLE IF NOT EXISTS decisions (
     permitted_action TEXT NOT NULL,
     scope TEXT NOT NULL,
     idempotency_key TEXT NOT NULL,
+    rationale TEXT NOT NULL DEFAULT '',
+    expires_at TEXT,
+    fingerprint TEXT,
+    receipt_json TEXT,
     created_at TEXT NOT NULL,
     UNIQUE (actor, decision_type, idempotency_key),
     FOREIGN KEY (work_order_id) REFERENCES work_orders(work_order_id)
@@ -252,6 +257,7 @@ class SQLiteStateStore:
         connection.executescript(_ARTIFACT_SCHEMA)
         SQLiteStateStore._migrate_artifact_columns(connection)
         connection.executescript(_LIFECYCLE_SCHEMA)
+        SQLiteStateStore._migrate_lifecycle_columns(connection)
 
     @staticmethod
     def _migrate_artifact_columns(connection: sqlite3.Connection) -> None:
@@ -275,6 +281,37 @@ class SQLiteStateStore:
             connection.execute(
                 "ALTER TABLE artifacts ADD COLUMN scan_attempt INTEGER NOT NULL DEFAULT 0"
             )
+
+    @staticmethod
+    def _migrate_lifecycle_columns(connection: sqlite3.Connection) -> None:
+        tables = {
+            str(row[0])
+            for row in connection.execute(
+                "SELECT name FROM sqlite_master WHERE type='table'"
+            ).fetchall()
+        }
+        if "response_packets" in tables:
+            packet_columns = {
+                str(row["name"])
+                for row in connection.execute("PRAGMA table_info(response_packets)").fetchall()
+            }
+            if "receipt_json" not in packet_columns:
+                connection.execute("ALTER TABLE response_packets ADD COLUMN receipt_json TEXT")
+        if "decisions" in tables:
+            decision_columns = {
+                str(row["name"])
+                for row in connection.execute("PRAGMA table_info(decisions)").fetchall()
+            }
+            if "rationale" not in decision_columns:
+                connection.execute(
+                    "ALTER TABLE decisions ADD COLUMN rationale TEXT NOT NULL DEFAULT ''"
+                )
+            if "expires_at" not in decision_columns:
+                connection.execute("ALTER TABLE decisions ADD COLUMN expires_at TEXT")
+            if "fingerprint" not in decision_columns:
+                connection.execute("ALTER TABLE decisions ADD COLUMN fingerprint TEXT")
+            if "receipt_json" not in decision_columns:
+                connection.execute("ALTER TABLE decisions ADD COLUMN receipt_json TEXT")
 
     @contextmanager
     def _connection(self) -> Iterator[sqlite3.Connection]:
@@ -356,6 +393,11 @@ class SQLiteStateStore:
                 "SELECT * FROM work_orders WHERE work_order_id = ?", (work_order_id,)
             ).fetchone()
             return None if row is None else self._row_to_work_order(row)
+
+    def list_work_orders(self) -> list[WorkOrder]:
+        with self._connection() as connection:
+            rows = connection.execute("SELECT * FROM work_orders ORDER BY created_at").fetchall()
+            return [self._row_to_work_order(row) for row in rows]
 
     def get_by_idempotency_key(self, idempotency_key: str) -> WorkOrder | None:
         with self._connection() as connection:
@@ -542,8 +584,9 @@ class _SQLiteWorkOrderSession:
             """
             INSERT INTO response_packets (
                 packet_id, work_order_id, response_type, actor, idempotency_key,
-                content_sha256, in_reply_to, source_input_sha256, packet_json, created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                content_sha256, in_reply_to, source_input_sha256, packet_json, receipt_json,
+                created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 str(packet["packet_id"]),
@@ -555,6 +598,9 @@ class _SQLiteWorkOrderSession:
                 str(packet["in_reply_to"]),
                 str(packet["source_input_sha256"]),
                 json.dumps(packet["packet"], sort_keys=True, separators=(",", ":")),
+                json.dumps(packet.get("receipt"), sort_keys=True, separators=(",", ":"))
+                if packet.get("receipt") is not None
+                else None,
                 str(packet["created_at"]),
             ),
         )
@@ -564,22 +610,31 @@ class _SQLiteWorkOrderSession:
     ) -> dict[str, Any] | None:
         row = self._connection.execute(
             """
-            SELECT packet_json, content_sha256 FROM response_packets
+            SELECT packet_json, content_sha256, receipt_json FROM response_packets
             WHERE work_order_id = ? AND actor = ? AND response_type = ? AND idempotency_key = ?
             """,
             (self._work_order_id, actor, response_type, idempotency_key),
         ).fetchone()
         if row is None:
             return None
-        return {"packet": json.loads(row["packet_json"]), "content_sha256": row["content_sha256"]}
+        receipt = None
+        if row["receipt_json"]:
+            loaded = json.loads(row["receipt_json"])
+            receipt = loaded if isinstance(loaded, dict) else None
+        return {
+            "packet": json.loads(row["packet_json"]),
+            "content_sha256": row["content_sha256"],
+            "receipt": receipt,
+        }
 
     def put_decision(self, decision: dict[str, Any]) -> None:
         self._connection.execute(
             """
             INSERT INTO decisions (
                 decision_id, work_order_id, decision_type, actor, target_kind, target_id,
-                target_sha256, permitted_action, scope, idempotency_key, created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                target_sha256, permitted_action, scope, idempotency_key, rationale,
+                expires_at, fingerprint, receipt_json, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 str(decision["decision_id"]),
@@ -592,6 +647,12 @@ class _SQLiteWorkOrderSession:
                 str(decision["permitted_action"]),
                 str(decision["scope"]),
                 str(decision["idempotency_key"]),
+                str(decision.get("rationale") or ""),
+                decision.get("expires_at"),
+                decision.get("fingerprint"),
+                json.dumps(decision.get("receipt"), sort_keys=True, separators=(",", ":"))
+                if decision.get("receipt") is not None
+                else None,
                 str(decision["created_at"]),
             ),
         )
@@ -614,6 +675,12 @@ class _SQLiteWorkOrderSession:
                 "scope": row["scope"],
                 "created_at": row["created_at"],
                 "idempotency_key": row["idempotency_key"],
+                "rationale": row["rationale"] if "rationale" in row.keys() else "",
+                "expires_at": row["expires_at"] if "expires_at" in row.keys() else None,
+                "fingerprint": row["fingerprint"] if "fingerprint" in row.keys() else None,
+                "receipt": json.loads(row["receipt_json"])
+                if "receipt_json" in row.keys() and row["receipt_json"]
+                else None,
             }
             for row in rows
         ]

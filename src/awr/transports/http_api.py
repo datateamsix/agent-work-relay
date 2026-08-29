@@ -128,19 +128,27 @@ def create_app(service: BrokerService) -> Any:
                 target_sha256=str(payload["target_sha256"]),
                 idempotency_key=str(payload["idempotency_key"]),
                 permitted_action=str(payload["permitted_action"]),
+                rationale=str(payload["rationale"]),
                 scope=str(payload.get("scope") or "restricted"),
                 target_kind=str(payload.get("target_kind") or "plan"),
+                expires_at=str(payload["expires_at"]) if payload.get("expires_at") else None,
                 expected_version=payload.get("expected_version"),
             )
         except WorkOrderValidationError as exc:
             return JSONResponse({"error": str(exc)}, status_code=400)
 
     @app.get("/v1/work-orders/{work_order_id}")
-    def get_work_order(work_order_id: str) -> dict[str, Any]:
-        return service.get_work_order(work_order_id)
+    def get_work_order(work_order_id: str) -> Any:
+        try:
+            return service.get_work_order(work_order_id)
+        except WorkOrderValidationError as exc:
+            return JSONResponse({"error": str(exc)}, status_code=400)
 
     @app.get("/v1/work-orders/{work_order_id}/pending")
-    def list_pending(work_order_id: str) -> list[dict[str, Any]]:
-        return service.list_pending_actions(work_order_id)
+    def list_pending(work_order_id: str) -> Any:
+        try:
+            return service.list_pending_actions(work_order_id)
+        except WorkOrderValidationError as exc:
+            return JSONResponse({"error": str(exc)}, status_code=400)
 
     return app

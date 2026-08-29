@@ -188,11 +188,11 @@ tools now consume those packets:
 
 - `submit_response` (`awr:response`) — parse and persist an AS-03 packet;
 - `record_decision` (`awr:decide`) — store an authenticated approval, rejection,
-  cancellation, or completion acceptance;
-- `list_pending_actions` (`awr:read`) — derived next actions, including
-  `plan.approval_requested` as a broker event rather than a decision;
+  cancellation, or completion acceptance with a required compact rationale;
+- `list_pending_actions` (`awr:read`) — actor-scoped next actions, or the
+  pending set for a required `work_order_id`;
 - `get_work_order` (`awr:read`) — durable status, lifecycle snapshot, and
-  pending actions.
+  pending actions for an authorized participant.
 
 Responses never grant execution, merge, or deployment authority. Execution
 enters `EXECUTING` only after `READY_FOR_EXECUTION` → `EXECUTION_DISPATCHED` →

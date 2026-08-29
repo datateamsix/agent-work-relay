@@ -53,11 +53,11 @@ class LifecycleHarness:
         assert receipt.status is WorkStatus.PLANNING
         return receipt.work_order_id
 
-    def projection(self, work_order_id: str) -> dict[str, object]:
-        return self.service.get_work_order(work_order_id, actor=SENDER)
+    def projection(self, work_order_id: str, *, actor: str = SENDER) -> dict[str, object]:
+        return self.service.get_work_order(work_order_id, actor=actor)
 
-    def parent_and_source(self, work_order_id: str) -> tuple[str, str]:
-        payload = self.projection(work_order_id)
+    def parent_and_source(self, work_order_id: str, *, actor: str = SENDER) -> tuple[str, str]:
+        payload = self.projection(work_order_id, actor=actor)
         lifecycle = payload["lifecycle"]
         assert isinstance(lifecycle, dict)
         return str(lifecycle["current_parent_id"]), str(lifecycle["source_input_sha256"])
@@ -77,7 +77,7 @@ class LifecycleHarness:
         in_reply_to: str | None = None,
         source_input_sha256: str | None = None,
     ) -> tuple[str, ResponsePacket]:
-        parent, source = self.parent_and_source(work_order_id)
+        parent, source = self.parent_and_source(work_order_id, actor=actor)
         parent = in_reply_to or parent
         source = source_input_sha256 or source
         self.clock += 1

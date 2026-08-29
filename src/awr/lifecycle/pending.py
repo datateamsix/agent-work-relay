@@ -4,6 +4,7 @@ from awr.contracts import WorkStatus
 
 
 def pending_actions(status: WorkStatus, *, blocked: bool = False) -> list[dict[str, str]]:
+    _ = blocked
     mapping: dict[WorkStatus, list[dict[str, str]]] = {
         WorkStatus.PLAN_READY: [
             {
@@ -64,6 +65,13 @@ def pending_actions(status: WorkStatus, *, blocked: bool = False) -> list[dict[s
                 "summary": "Record a review recommendation. This does not close the work order.",
             }
         ],
+        WorkStatus.WAITING_FOR_INPUT: [
+            {
+                "action": "question.answer",
+                "kind": "broker_event",
+                "summary": "Answer the blocking question and resume the prior state.",
+            }
+        ],
         WorkStatus.WAITING_FOR_HUMAN_REVIEW: [
             {
                 "action": "accept_completion",
@@ -84,14 +92,4 @@ def pending_actions(status: WorkStatus, *, blocked: bool = False) -> list[dict[s
             }
         ],
     }
-    actions = list(mapping.get(status, []))
-    if status is WorkStatus.WAITING_FOR_HUMAN_REVIEW and blocked:
-        actions.insert(
-            0,
-            {
-                "action": "question.answer",
-                "kind": "broker_event",
-                "summary": "Answer the blocking question and resume the prior state.",
-            },
-        )
-    return actions
+    return list(mapping.get(status, []))

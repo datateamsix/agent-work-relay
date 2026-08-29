@@ -46,6 +46,7 @@ class AuthorityGuardrailTests(unittest.TestCase):
             target_sha256=str(lifecycle["plan_sha256"]),
             idempotency_key="approve-a",
             permitted_action="plan.execute",
+            rationale="Approve the stored plan fingerprint.",
         )
         with self.assertRaisesRegex(WorkOrderValidationError, "cannot authorize another"):
             self.harness.service.dispatch_execution(
@@ -65,6 +66,7 @@ class AuthorityGuardrailTests(unittest.TestCase):
                 target_sha256="b" * 64,
                 idempotency_key="not-a-decision",
                 permitted_action="approve",
+                rationale="Not a stored decision.",
             )
 
     def test_responses_cannot_grant_authority(self) -> None:
@@ -88,6 +90,7 @@ class AuthorityGuardrailTests(unittest.TestCase):
             target_sha256=str(lifecycle["plan_sha256"]),
             idempotency_key="approve-close",
             permitted_action="plan.execute",
+            rationale="Approve the stored plan fingerprint.",
         )
         self.harness.service.dispatch_execution(
             self.work_order_id,

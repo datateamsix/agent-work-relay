@@ -142,7 +142,8 @@ class ResponseEnforcementTests(unittest.TestCase):
         with self.assertRaisesRegex(WorkOrderValidationError, "already bound"):
             self.harness.service.submit_response(markdown=rebound, actor=RECIPIENT)
         replay = self.harness.service.submit_response(markdown=markdown, actor=RECIPIENT)
-        self.assertTrue(replay["duplicate"])
+        self.assertEqual(replay, first)
+        self.assertFalse(replay["duplicate"])
         self.assertEqual(replay["status"], WorkStatus.PLAN_READY.value)
 
     def test_wrong_provider_run_is_rejected(self) -> None:
@@ -163,6 +164,7 @@ class ResponseEnforcementTests(unittest.TestCase):
             target_sha256=str(lifecycle["plan_sha256"]),
             idempotency_key="approve-run",
             permitted_action="plan.execute",
+            rationale="Approve the stored plan fingerprint.",
         )
         self.harness.service.dispatch_execution(
             self.work_order_id,

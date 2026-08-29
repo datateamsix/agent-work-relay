@@ -59,6 +59,7 @@ def _approval() -> StoredDecision:
         scope="restricted",
         created_at="2026-08-29T00:00:00+00:00",
         idempotency_key="approve-1",
+        rationale="Approve the stored plan fingerprint.",
     )
 
 
@@ -80,7 +81,7 @@ class MinimizedTransitionTests(unittest.TestCase):
             (WorkStatus.PLANNER_REVIEWING, LifecycleEvent.REVIEW_COMPLETED),
             (WorkStatus.WAITING_FOR_HUMAN_REVIEW, LifecycleEvent.ACCEPT_COMPLETION),
             (WorkStatus.WAITING_FOR_HUMAN_REVIEW, LifecycleEvent.REQUEST_REVISION),
-            (WorkStatus.WAITING_FOR_HUMAN_REVIEW, LifecycleEvent.QUESTION_ANSWER),
+            (WorkStatus.WAITING_FOR_INPUT, LifecycleEvent.QUESTION_ANSWER),
             (WorkStatus.REVISION_REQUIRED, LifecycleEvent.IMPLEMENTATION_REFINE),
         }
         self.assertEqual(set(TRANSITION_TABLE), expected)
@@ -185,6 +186,53 @@ class KernelGuardTests(unittest.TestCase):
         )
         self.assertEqual(result.status, WorkStatus.WAITING_FOR_HUMAN_REVIEW)
         self.assertEqual(result.snapshot.latest_review_outcome, "APPROVED")
+
+    def test_question_blocked_enters_waiting_for_input(self) -> None:
+        snapshot = derive_snapshot("AWR-1", "human:owner", "cursor:worker", SOURCE)
+        result = apply_response(
+            status=WorkStatus.PLANNING,
+            snapshot=snapshot,
+            packet=_packet(
+                ResponseType.QUESTION_BLOCKED,
+                {"questions": [{"id": "q1", "text": "Which API?"}]},
+            ),
+            actor="cursor:worker",
+            decisions=(),
+        )
+        self.assertEqual(result.status, WorkStatus.WAITING_FOR_INPUT)
+        self.assertEqual(result.snapshot.blocked_from, WorkStatus.PLANNING)
+        answered = apply_broker_event(
+            status=result.status,
+            snapshot=result.snapshot,
+            event=LifecycleEvent.QUESTION_ANSWER,
+            actor="human:owner",
+            message_id="ANS-1",
+            decisions=(),
+        )
+        self.assertEqual(answered.status, WorkStatus.PLANNING)
+        self.assertIsNone(answered.snapshot.blocked_from)
+        with self.assertRaises(TransitionError):
+            next_state(WorkStatus.WAITING_FOR_HUMAN_REVIEW, LifecycleEvent.QUESTION_ANSWER)
+
+    def test_executor_identities_cannot_record_decisions(self) -> None:
+        snapshot = replace(
+            derive_snapshot("AWR-1", "human:owner", "cursor:worker", SOURCE),
+            plan_id="PLAN-1",
+            plan_sha256=PLAN_SHA,
+            bound_agent_id="cursor:bound-run",
+            executor_principals=frozenset({"cursor:worker", "cursor:bound-run"}),
+        )
+        for actor in ("cursor:worker", "cursor:bound-run"):
+            decision = replace(_approval(), actor=actor)
+            with self.subTest(actor=actor), self.assertRaisesRegex(
+                AuthorityError, "cannot record human decisions"
+            ):
+                apply_decision(
+                    status=WorkStatus.WAITING_FOR_PLAN_APPROVAL,
+                    snapshot=snapshot,
+                    event=LifecycleEvent.APPROVE_PLAN,
+                    decision=decision,
+                )
 
     def test_foreign_actor_and_wrong_source_fail(self) -> None:
         snapshot = derive_snapshot("AWR-1", "human:owner", "cursor:worker", SOURCE)

@@ -27,7 +27,13 @@ from .contracts import (
 )
 from .decorators import parse_directive
 from .executors.base import PlanningExecutor
-from .lifecycle.decisions import DecisionTargetKind, DecisionType, StoredDecision
+from .lifecycle.decisions import (
+    DecisionTargetKind,
+    DecisionType,
+    StoredDecision,
+    fingerprint_decision,
+    require_rationale,
+)
 from .lifecycle.errors import IdempotencyConflict, LifecycleError
 from .lifecycle.events import LifecycleEvent
 from .lifecycle.kernel import (
@@ -280,8 +286,10 @@ class BrokerService:
             raise WorkOrderValidationError(str(exc)) from exc
         return self._route_and_dispatch(work_order=work_order, wrapped=wrapped, parent=parent)
 
-    def get_work_order_artifacts(self, work_order_id: str) -> list[dict[str, Any]]:
-        self._require_work_order(work_order_id)
+    def get_work_order_artifacts(
+        self, work_order_id: str, *, actor: str | None = None
+    ) -> list[dict[str, Any]]:
+        self._authorize_projection(work_order_id, actor)
         validated = self._latest_event(work_order_id, "bundle.validated")
         if validated is None:
             return []
@@ -396,8 +404,8 @@ class BrokerService:
             )
             return self._plan_packet(work_order_id, received, available)
 
-    def get_plan(self, work_order_id: str) -> PlanPacket:
-        self._require_work_order(work_order_id)
+    def get_plan(self, work_order_id: str, *, actor: str | None = None) -> PlanPacket:
+        self._authorize_projection(work_order_id, actor)
         plan = self._plan_from_ledger(work_order_id)
         if plan is not None:
             return plan
@@ -407,16 +415,18 @@ class BrokerService:
             raise WorkOrderValidationError(f"Plan is not ready for work order {work_order_id}.")
         return plan
 
-    def get_work_order_timeline(self, work_order_id: str) -> list[dict[str, Any]]:
-        self._require_work_order(work_order_id)
+    def get_work_order_timeline(
+        self, work_order_id: str, *, actor: str | None = None
+    ) -> list[dict[str, Any]]:
+        self._authorize_projection(work_order_id, actor)
         return [entry.to_dict() for entry in self.store.list_ledger(work_order_id)]
 
     def get_work_order(self, work_order_id: str, *, actor: str | None = None) -> dict[str, Any]:
         work_order = self._require_work_order(work_order_id)
-        if actor is not None:
-            self._actor(actor)
+        resolved = self._actor(actor)
         with self.store.lock_work_order(work_order_id) as session:
             snapshot = self._snapshot_from_session(session, work_order)
+            self._authorize_reader(resolved, work_order, snapshot)
             decisions = [StoredDecision.from_dict(item) for item in session.list_decisions()]
         return {
             **work_order.to_dict(),
@@ -435,15 +445,28 @@ class BrokerService:
     def list_pending_actions(
         self, work_order_id: str | None = None, *, actor: str | None = None
     ) -> list[dict[str, Any]]:
-        if actor is not None:
-            self._actor(actor)
+        resolved = self._actor(actor)
         if work_order_id is not None:
-            projection = self.get_work_order(work_order_id, actor=actor)
+            projection = self.get_work_order(work_order_id, actor=resolved)
             return [
                 {**item, "work_order_id": work_order_id, "status": projection["status"]}
                 for item in projection["pending_actions"]
             ]
-        return []
+        pending: list[dict[str, Any]] = []
+        for work_order in self.store.list_work_orders():
+            try:
+                projection = self.get_work_order(work_order.work_order_id, actor=resolved)
+            except WorkOrderValidationError:
+                continue
+            pending.extend(
+                {
+                    **item,
+                    "work_order_id": work_order.work_order_id,
+                    "status": projection["status"],
+                }
+                for item in projection["pending_actions"]
+            )
+        return pending
 
     def submit_response(
         self,
@@ -477,6 +500,9 @@ class BrokerService:
                         raise IdempotencyConflict(
                             "The idempotency key is already bound to a different canonical packet."
                         )
+                    stored_receipt = existing.get("receipt")
+                    if isinstance(stored_receipt, dict):
+                        return stored_receipt
                     current = session.get_work_order()
                     return {
                         "receipt_type": "response.accepted",
@@ -500,19 +526,6 @@ class BrokerService:
                     decisions=decisions,
                     expected_version=expected_version,
                 )
-                session.put_response_packet(
-                    {
-                        "packet_id": message_id,
-                        "response_type": packet.response_type.value,
-                        "actor": resolved,
-                        "idempotency_key": packet.idempotency_key,
-                        "content_sha256": digest,
-                        "in_reply_to": packet.in_reply_to,
-                        "source_input_sha256": packet.source_input_sha256,
-                        "created_at": packet.created_at,
-                        "packet": packet.to_dict(),
-                    }
-                )
                 session.update_status(result.status)
                 entry = session.append_ledger(
                     event_type=result.ledger_event,
@@ -530,7 +543,7 @@ class BrokerService:
                         "current_parent_id": message_id,
                     }
                 )
-                return {
+                receipt = {
                     "receipt_type": "response.accepted",
                     "work_order_id": packet.work_order_id,
                     "response_type": packet.response_type.value,
@@ -546,6 +559,21 @@ class BrokerService:
                         packet_fingerprint=digest,
                     ),
                 }
+                session.put_response_packet(
+                    {
+                        "packet_id": message_id,
+                        "response_type": packet.response_type.value,
+                        "actor": resolved,
+                        "idempotency_key": packet.idempotency_key,
+                        "content_sha256": digest,
+                        "in_reply_to": packet.in_reply_to,
+                        "source_input_sha256": packet.source_input_sha256,
+                        "created_at": packet.created_at,
+                        "packet": packet.to_dict(),
+                        "receipt": receipt,
+                    }
+                )
+                return receipt
         except LifecycleError as exc:
             raise WorkOrderValidationError(str(exc)) from exc
 
@@ -559,8 +587,10 @@ class BrokerService:
         target_sha256: str,
         idempotency_key: str,
         permitted_action: str,
+        rationale: str,
         scope: str = "restricted",
         target_kind: str = "plan",
+        expires_at: str | None = None,
         expected_version: int | None = None,
     ) -> dict[str, Any]:
         resolved = self._actor(actor)
@@ -580,6 +610,10 @@ class BrokerService:
                 else f"Unknown decision type: {decision_type}."
             ) from exc
         work_order = self._require_work_order(work_order_id)
+        try:
+            compact_rationale = require_rationale(rationale)
+        except LifecycleError as exc:
+            raise WorkOrderValidationError(str(exc)) from exc
         decision = StoredDecision(
             decision_id=f"DEC-{uuid4()}",
             decision_type=stored_type,
@@ -592,7 +626,10 @@ class BrokerService:
             scope=scope,
             created_at=datetime.now(UTC).isoformat(),
             idempotency_key=idempotency_key,
+            rationale=compact_rationale,
+            expires_at=expires_at,
         )
+        incoming_fingerprint = fingerprint_decision(decision)
         try:
             with self.store.lock_work_order(work_order_id) as session:
                 existing = next(
@@ -606,14 +643,16 @@ class BrokerService:
                     None,
                 )
                 if existing is not None:
-                    if (
-                        existing["target_id"] != decision.target_id
-                        or existing["target_sha256"].removeprefix("sha256:")
-                        != decision.target_sha256
-                    ):
+                    stored_fingerprint = str(
+                        existing.get("fingerprint") or fingerprint_decision(existing)
+                    )
+                    if stored_fingerprint != incoming_fingerprint:
                         raise IdempotencyConflict(
                             "The idempotency key is already bound to a different decision."
                         )
+                    stored_receipt = existing.get("receipt")
+                    if isinstance(stored_receipt, dict):
+                        return stored_receipt
                     current = session.get_work_order()
                     return {
                         "receipt_type": "decision.recorded",
@@ -631,7 +670,6 @@ class BrokerService:
                     decision=decision,
                     expected_version=expected_version,
                 )
-                session.put_decision(decision.to_dict())
                 session.update_status(result.status)
                 entry = session.append_ledger(
                     event_type=result.ledger_event,
@@ -640,14 +678,23 @@ class BrokerService:
                     payload=decision.to_dict(),
                 )
                 session.put_lifecycle(result.snapshot.to_dict())
-                return {
+                receipt = {
                     "receipt_type": "decision.recorded",
                     "work_order_id": work_order_id,
                     "decision_id": decision.decision_id,
                     "decision_type": stored_type.value,
                     "status": result.status.value,
                     "ledger_sequence": entry.sequence,
+                    "fingerprint": incoming_fingerprint,
                 }
+                session.put_decision(
+                    {
+                        **decision.to_dict(),
+                        "fingerprint": incoming_fingerprint,
+                        "receipt": receipt,
+                    }
+                )
+                return receipt
         except LifecycleError as exc:
             raise WorkOrderValidationError(str(exc)) from exc
 
@@ -762,6 +809,23 @@ class BrokerService:
                 }
         except LifecycleError as exc:
             raise WorkOrderValidationError(str(exc)) from exc
+
+    def _authorize_reader(
+        self, actor: str, work_order: WorkOrder, snapshot: LifecycleSnapshot
+    ) -> None:
+        allowed = snapshot.participants | {work_order.sender, work_order.recipient}
+        if actor not in allowed:
+            raise WorkOrderValidationError(f"{actor} is not authorized to read this work order.")
+
+    def _authorize_projection(self, work_order_id: str, actor: str | None) -> WorkOrder:
+        work_order = self._require_work_order(work_order_id)
+        if actor is None:
+            return work_order
+        resolved = self._actor(actor)
+        with self.store.lock_work_order(work_order_id) as session:
+            snapshot = self._snapshot_from_session(session, work_order)
+            self._authorize_reader(resolved, work_order, snapshot)
+        return work_order
 
     def _snapshot_from_session(
         self, session: WorkOrderSession, work_order: WorkOrder

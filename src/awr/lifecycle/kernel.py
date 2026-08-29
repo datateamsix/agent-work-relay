@@ -5,7 +5,12 @@ from dataclasses import dataclass, replace
 from awr.contracts import WorkStatus
 from awr.responses.contracts import ResponsePacket, ResponseType
 
-from .decisions import DecisionType, StoredDecision, matching_plan_approval
+from .decisions import (
+    DecisionType,
+    StoredDecision,
+    decision_is_expired,
+    matching_plan_approval,
+)
 from .errors import AuthorityError, LineageError, TransitionError
 from .events import DECISION_EVENTS, LifecycleEvent
 from .transitions import REVIEW_OUTCOMES, next_state
@@ -25,6 +30,8 @@ class LifecycleSnapshot:
     blocked_from: WorkStatus | None = None
     execution_acknowledged: bool = False
     latest_review_outcome: str | None = None
+    decision_principals: frozenset[str] = frozenset()
+    executor_principals: frozenset[str] = frozenset()
     original_lineage: tuple[str, ...] = ()
 
     def to_dict(self) -> dict[str, object]:
@@ -41,6 +48,8 @@ class LifecycleSnapshot:
             "blocked_from": None if self.blocked_from is None else self.blocked_from.value,
             "execution_acknowledged": self.execution_acknowledged,
             "latest_review_outcome": self.latest_review_outcome,
+            "decision_principals": sorted(self.decision_principals),
+            "executor_principals": sorted(self.executor_principals),
             "original_lineage": list(self.original_lineage),
         }
 
@@ -70,6 +79,8 @@ class LifecycleSnapshot:
                 if payload.get("latest_review_outcome")
                 else None
             ),
+            decision_principals=_string_set(payload.get("decision_principals")),
+            executor_principals=_string_set(payload.get("executor_principals")),
             original_lineage=tuple(str(item) for item in lineage)
             if isinstance(lineage, list)
             else (),
@@ -104,6 +115,8 @@ def derive_snapshot(
         current_parent_id=work_order_id,
         version=1,
         participants=frozenset({sender, recipient, "broker:awr"}),
+        decision_principals=frozenset({sender}),
+        executor_principals=frozenset({recipient}),
         original_lineage=(work_order_id,),
     )
 
@@ -140,6 +153,7 @@ def apply_response(
     acknowledged = snapshot.execution_acknowledged
     blocked_from = snapshot.blocked_from
     latest_review_outcome = snapshot.latest_review_outcome
+    executor_principals = snapshot.executor_principals
     if packet.response_type is ResponseType.PLAN_COMPLETED:
         plan_id = str(packet.payload.get("plan_id") or packet.message_id or packet.content_sha256)
         plan_sha256 = packet.content_sha256
@@ -152,6 +166,7 @@ def apply_response(
         acknowledged = True
         bound_run = packet.executor_run_id or str(packet.payload.get("executor_run_id"))
         bound_agent = packet.actor or actor
+        executor_principals = snapshot.executor_principals | {bound_agent}
     if packet.response_type in {
         ResponseType.EXECUTION_PROGRESS,
         ResponseType.EXECUTION_COMPLETED,
@@ -178,6 +193,7 @@ def apply_response(
         blocked_from=blocked_from,
         execution_acknowledged=acknowledged,
         latest_review_outcome=latest_review_outcome,
+        executor_principals=executor_principals,
         original_lineage=snapshot.original_lineage or (snapshot.current_parent_id,),
     )
     return TransitionResult(status=target, snapshot=updated, event=event, ledger_event=event.value)
@@ -255,6 +271,11 @@ def apply_decision(
     _assert_version(snapshot, expected_version)
     if event not in DECISION_EVENTS:
         raise AuthorityError(f"{event.value} is not a stored decision.")
+    _assert_decision_principal(decision.actor, snapshot)
+    if decision_is_expired(decision):
+        raise AuthorityError("The stored decision has expired.")
+    if not decision.rationale.strip():
+        raise AuthorityError("A compact decision rationale is required.")
     if decision.work_order_id != snapshot.work_order_id:
         raise LineageError("Decision work-order ID does not match the lineage.")
     if snapshot.blocked_from is not None and event in {
@@ -298,6 +319,19 @@ def _assert_actor(actor: str, snapshot: LifecycleSnapshot) -> None:
         raise AuthorityError("Authenticated participant identity is required.")
     if actor not in snapshot.participants:
         raise AuthorityError(f"{actor} is not a work-order participant.")
+
+
+def _assert_decision_principal(actor: str, snapshot: LifecycleSnapshot) -> None:
+    if actor == snapshot.bound_agent_id or actor in snapshot.executor_principals:
+        raise AuthorityError("Executor identities cannot record human decisions.")
+    if snapshot.decision_principals and actor not in snapshot.decision_principals:
+        raise AuthorityError("Only a decision principal may record human decisions.")
+
+
+def _string_set(value: object) -> frozenset[str]:
+    if not isinstance(value, list):
+        return frozenset()
+    return frozenset(str(item) for item in value)
 
 
 def _assert_version(snapshot: LifecycleSnapshot, expected_version: int | None) -> None:

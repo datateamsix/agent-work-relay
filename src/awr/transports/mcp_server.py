@@ -176,9 +176,11 @@ def create_server(service: BrokerService | None = None) -> Any:
         target_sha256: str,
         idempotency_key: str,
         permitted_action: str,
+        rationale: str,
         sender: str | None = None,
         scope: str = "restricted",
         target_kind: str = "plan",
+        expires_at: str | None = None,
         expected_version: int | None = None,
     ) -> dict[str, Any]:
         return broker.record_decision(
@@ -189,8 +191,10 @@ def create_server(service: BrokerService | None = None) -> Any:
             target_sha256=target_sha256,
             idempotency_key=idempotency_key,
             permitted_action=permitted_action,
+            rationale=rationale,
             scope=scope,
             target_kind=target_kind,
+            expires_at=expires_at,
             expected_version=expected_version,
         )
 

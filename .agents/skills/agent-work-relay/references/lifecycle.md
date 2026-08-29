@@ -6,7 +6,7 @@
 |---|---|---|
 | Define | `@input` + `feature.plan` or `bugfix.plan` | Planning work order |
 | Plan | `@response` + `plan.completed` | Immutable plan packet |
-| Clarify | `question.blocked` ↔ `question.answer` | Answered question receipt |
+| Clarify | `question.blocked` ↔ `question.answer` | `WAITING_FOR_INPUT`, then restored prior state |
 | Revise | `plan.revise` → `plan.completed` | New plan version |
 | Approve | `plan.approval_requested` then `record_decision approve_plan` | Approval bound to the exact plan ID and SHA-256 |
 | Execute | `plan.execute` | `EXECUTION_DISPATCHED` — not yet executing |

@@ -1,6 +1,13 @@
 """Deterministic AWR lifecycle kernel. Responses stay in awr.responses."""
 
-from .decisions import DecisionTargetKind, DecisionType, StoredDecision
+from .decisions import (
+    MAX_DECISION_RATIONALE_BYTES,
+    DecisionTargetKind,
+    DecisionType,
+    StoredDecision,
+    fingerprint_decision,
+    require_rationale,
+)
 from .errors import (
     AuthorityError,
     IdempotencyConflict,
@@ -20,6 +27,7 @@ from .pending import pending_actions
 from .transitions import TRANSITION_TABLE, allowed_events, next_state
 
 __all__ = [
+    "MAX_DECISION_RATIONALE_BYTES",
     "TRANSITION_TABLE",
     "AuthorityError",
     "DecisionTargetKind",
@@ -36,6 +44,8 @@ __all__ = [
     "apply_broker_event",
     "apply_decision",
     "apply_response",
+    "fingerprint_decision",
     "next_state",
     "pending_actions",
+    "require_rationale",
 ]
