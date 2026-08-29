@@ -90,6 +90,17 @@ class ResponseContractTests(unittest.TestCase):
             response_packet_cache_key(canonical_sha256=packet.content_sha256 or ""),
         )
 
+    def test_execution_completed_render_round_trip(self) -> None:
+        packet = parse_response_packet(
+            _base(response_type="execution.completed", payload={"summary": "Done"})
+        )
+        markdown = render_response_markdown(packet)
+        rendered = parse_response_markdown(markdown)
+        self.assertEqual(rendered.response_type, ResponseType.EXECUTION_COMPLETED)
+        self.assertEqual(rendered.payload["summary"], "Done")
+        self.assertEqual(rendered.content_sha256, fingerprint_packet(rendered))
+        self.assertEqual(rendered.content_sha256, packet.content_sha256)
+
     def test_response_markdown_requires_decorator(self) -> None:
         with self.assertRaises(DirectiveError):
             parse_response_markdown("# just a plan")

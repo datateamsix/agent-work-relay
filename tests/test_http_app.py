@@ -76,7 +76,10 @@ class HostedHttpTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         body = response.json()
         self.assertEqual(body["resource"], "http://testserver/mcp")
-        self.assertEqual(body["scopes_supported"], ["awr:plan", "awr:read", "awr:refresh"])
+        self.assertEqual(
+            body["scopes_supported"],
+            ["awr:plan", "awr:read", "awr:refresh", "awr:response", "awr:decide"],
+        )
         self.assertEqual(body["bearer_methods_supported"], ["header"])
 
     def test_mcp_missing_token(self) -> None:
@@ -101,10 +104,14 @@ class HostedHttpTests(unittest.TestCase):
                 "finalize_artifact_upload",
                 "get_artifact_status",
                 "get_plan",
+                "get_work_order",
                 "get_work_order_artifacts",
                 "get_work_order_timeline",
+                "list_pending_actions",
+                "record_decision",
                 "refresh_planning",
                 "submit_prompt_for_planning",
+                "submit_response",
                 "submit_work_bundle_for_planning",
             ],
         )

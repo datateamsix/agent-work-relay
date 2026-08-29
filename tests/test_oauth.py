@@ -74,7 +74,10 @@ class StaticTokenTests(unittest.TestCase):
     def test_static_token_grants_all_scopes(self) -> None:
         settings = Settings(env="test", auth_mode="static", static_token="local-dev-token")
         principal = TokenVerifier(settings).verify("local-dev-token")
-        self.assertEqual(principal.scopes, frozenset({"awr:plan", "awr:read", "awr:refresh"}))
+        self.assertEqual(
+            principal.scopes,
+            frozenset({"awr:plan", "awr:read", "awr:refresh", "awr:response", "awr:decide"}),
+        )
 
 
 if __name__ == "__main__":

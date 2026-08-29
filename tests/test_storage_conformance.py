@@ -133,6 +133,102 @@ class StorageConformanceMixin:
         self.assertEqual(events.count("plan.received"), 1)
         self.assertEqual(events.count("plan.available"), 1)
 
+    def test_lifecycle_statuses_and_atomic_projection(self) -> None:
+        from awr.lifecycle.kernel import derive_snapshot
+
+        candidate = _accepted_work_order("AWR-22222222-2222-2222-2222-222222222222", "idem-life")
+        work_order, created, _ = self.store.create_work_order(candidate)  # type: ignore[attr-defined]
+        self.assertTrue(created)
+        snapshot = derive_snapshot(
+            work_order.work_order_id,
+            work_order.sender,
+            work_order.recipient,
+            work_order.content_sha256,
+        )
+        with self.store.lock_work_order(work_order.work_order_id) as session:  # type: ignore[attr-defined]
+            session.put_response_packet(
+                {
+                    "packet_id": "MSG-plan",
+                    "response_type": "plan.completed",
+                    "actor": work_order.recipient,
+                    "idempotency_key": "life-plan",
+                    "content_sha256": "c" * 64,
+                    "in_reply_to": work_order.work_order_id,
+                    "source_input_sha256": work_order.content_sha256,
+                    "created_at": work_order.created_at,
+                    "packet": {"response_type": "plan.completed"},
+                }
+            )
+            session.put_decision(
+                {
+                    "decision_id": "DEC-life",
+                    "decision_type": "approve_plan",
+                    "work_order_id": work_order.work_order_id,
+                    "actor": work_order.sender,
+                    "target_kind": "plan",
+                    "target_id": "PLAN-1",
+                    "target_sha256": "c" * 64,
+                    "permitted_action": "plan.execute",
+                    "scope": "restricted",
+                    "created_at": work_order.created_at,
+                    "idempotency_key": "life-approve",
+                }
+            )
+            session.update_status(WorkStatus.EXECUTION_DISPATCHED)
+            session.append_ledger(
+                "plan.execute",
+                work_order.sender,
+                "broker:awr",
+                {"message_id": "EXD-1"},
+            )
+            session.put_lifecycle(
+                {
+                    **snapshot.to_dict(),
+                    "plan_id": "PLAN-1",
+                    "plan_sha256": "c" * 64,
+                }
+            )
+        stored = self.store.get_work_order(work_order.work_order_id)  # type: ignore[attr-defined]
+        self.assertEqual(stored.status, WorkStatus.EXECUTION_DISPATCHED)
+        with self.store.lock_work_order(work_order.work_order_id) as session:  # type: ignore[attr-defined]
+            replay = session.get_response_by_idempotency(
+                work_order.recipient, "plan.completed", "life-plan"
+            )
+            decisions = session.list_decisions()
+            lifecycle = session.get_lifecycle()
+        self.assertIsNotNone(replay)
+        self.assertEqual(len(decisions), 1)
+        self.assertEqual(decisions[0]["target_id"], "PLAN-1")
+        assert lifecycle is not None
+        self.assertEqual(lifecycle["plan_id"], "PLAN-1")
+        events = [entry.event_type for entry in self.store.list_ledger(work_order.work_order_id)]  # type: ignore[attr-defined]
+        self.assertIn("plan.execute", events)
+
+    def test_failed_lifecycle_write_does_not_partially_commit(self) -> None:
+        candidate = _accepted_work_order("AWR-33333333-3333-3333-3333-333333333333", "idem-atomic")
+        work_order, _, _ = self.store.create_work_order(candidate)  # type: ignore[attr-defined]
+        try:
+            with self.store.lock_work_order(work_order.work_order_id) as session:  # type: ignore[attr-defined]
+                session.update_status(WorkStatus.EXECUTING)
+                session.append_ledger(
+                    "execution.acknowledged",
+                    work_order.recipient,
+                    "broker:awr",
+                    {"executor_run_id": "run-1"},
+                )
+                session.put_lifecycle({"work_order_id": work_order.work_order_id})
+                raise RuntimeError("boom")
+        except RuntimeError:
+            pass
+        stored = self.store.get_work_order(work_order.work_order_id)  # type: ignore[attr-defined]
+        self.assertEqual(stored.status, WorkStatus.ACCEPTED)
+        self.assertEqual(
+            [entry.event_type for entry in self.store.list_ledger(work_order.work_order_id)],  # type: ignore[attr-defined]
+            ["work_order.accepted"],
+        )
+        with self.store.lock_work_order(work_order.work_order_id) as session:  # type: ignore[attr-defined]
+            self.assertIsNone(session.get_lifecycle())
+
 
 class SQLiteConformanceTests(StorageConformanceMixin, unittest.TestCase):
     def setUp(self) -> None:

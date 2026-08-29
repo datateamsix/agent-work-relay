@@ -8,7 +8,9 @@ from awr.executors.recording_cursor import RecordingCursorExecutor
 from awr.factory import build_artifact_relay
 from awr.responses.cache import (
     etag_for_digest,
+    provider_run_cache_key,
     replay_cache_key,
+    response_idempotency_cache_key,
     response_packet_cache_key,
     security_receipt_cache_key,
 )
@@ -88,6 +90,40 @@ class CacheKeyContractTests(unittest.TestCase):
         self.assertEqual(first, second)
         self.assertNotEqual(first, other)
         self.assertEqual(etag_for_digest("c" * 64), f'"sha256:{"c" * 64}"')
+        first_id = response_idempotency_cache_key(
+            actor="cursor:worker",
+            operation="plan.completed",
+            idempotency_key="k1",
+            packet_fingerprint="d" * 64,
+        )
+        same_id = response_idempotency_cache_key(
+            actor="cursor:worker",
+            operation="plan.completed",
+            idempotency_key="k1",
+            packet_fingerprint="sha256:" + "d" * 64,
+        )
+        other_id = response_idempotency_cache_key(
+            actor="cursor:worker",
+            operation="plan.completed",
+            idempotency_key="k1",
+            packet_fingerprint="e" * 64,
+        )
+        self.assertEqual(first_id, same_id)
+        self.assertNotEqual(first_id, other_id)
+        self.assertNotEqual(
+            provider_run_cache_key(
+                provider="cursor",
+                agent_id="agent-1",
+                run_id="run-1",
+                last_known_version="1",
+            ),
+            provider_run_cache_key(
+                provider="cursor",
+                agent_id="agent-1",
+                run_id="run-2",
+                last_known_version="1",
+            ),
+        )
 
     def test_cached_json_fingerprints_before_optional_gzip(self) -> None:
         try:

@@ -37,7 +37,7 @@ def signed_token(private_key: object, **claims: object) -> str:
         "aud": AUDIENCE,
         "sub": "planner-1",
         "exp": int((datetime.now(UTC) + timedelta(minutes=5)).timestamp()),
-        "scope": "awr:plan awr:read awr:refresh",
+        "scope": "awr:plan awr:read awr:refresh awr:response awr:decide",
         **claims,
     }
     return jwt.encode(payload, private_key, algorithm="RS256", headers={"kid": "awr-test-key"})
