@@ -43,8 +43,15 @@ Official HTTP behavior used by this slice:
 
 - Follow-up reuse cannot prove exact-once acceptance after timeout or
   `agent_busy`. The dispatch is marked `RECONCILIATION_REQUIRED`.
+- Live terminal success requires a valid allowed `@response` packet
+  (`execution.completed`, `execution.failed`, or `question.blocked`).
+  `@response-completed`, empty output, Git metadata alone, `# Recorded`
+  text, arbitrary prose, and provider `FINISHED` status are not success.
 - Unstructured Cursor terminal output is never inferred as success. AWR
   records `execution.failed` with `MALFORMED_EXECUTOR_RESPONSE`.
+- A `question.blocked` receipt is stored on the dispatch. Refresh while
+  `WAITING_FOR_INPUT` returns that original receipt with `duplicate: true`
+  and does not poll Cursor. `question.answer` resumes the same provider run.
 - Execution that depends on undelivered artifacts returns
   `DELIVERY_UNSUPPORTED`. Artifact bodies remain AWR-AS-04.
 - Completion stays in `COMPLETION_READY` until planner review and human

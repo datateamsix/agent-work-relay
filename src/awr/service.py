@@ -800,6 +800,8 @@ class BrokerService:
             return self._advance_execution_dispatch(str(dispatch["dispatch_id"]), actor=resolved)
         if status is WorkStatus.EXECUTING:
             return self._reconcile_execution_run(work_order_id, actor=resolved)
+        if status is WorkStatus.WAITING_FOR_INPUT:
+            return self._replay_blocked_execution_receipt(work_order_id)
         if status in {
             WorkStatus.COMPLETION_READY,
             WorkStatus.PLANNER_REVIEWING,
@@ -1243,34 +1245,19 @@ class BrokerService:
             return self.submit_response(
                 markdown=render_response_markdown(rebuilt), actor=work_order.recipient
             )
-        if text in {"@response-completed", ""} or text.startswith("# Recorded"):
-            payload: dict[str, Any] = {"summary": "Implementation completed."}
-            if run.git:
-                git = run.git
-                if isinstance(git.get("repository"), str):
-                    payload["repository"] = git["repository"]
-                if isinstance(git.get("branch"), str):
-                    payload["branch"] = git["branch"]
-                if isinstance(git.get("base_ref"), str):
-                    payload["base_ref"] = git["base_ref"]
-                if isinstance(git.get("commit_sha"), str):
-                    payload["commit_sha"] = git["commit_sha"]
-                if isinstance(git.get("pull_request_url"), str):
-                    payload["pull_request_url"] = git["pull_request_url"]
-            if not text and not run.git:
-                return self._malformed_terminal(work_order, run, "empty terminal output")
-            packet = self._trusted_response(
-                work_order,
-                ResponseType.EXECUTION_COMPLETED,
-                payload=payload,
-                actor=work_order.recipient,
-                idempotency_key=f"exec-completed-{run.executor_run_id}",
-                executor_run_id=run.executor_run_id,
-            )
-            return self.submit_response(
-                markdown=render_response_markdown(packet), actor=work_order.recipient
-            )
         return self._malformed_terminal(work_order, run, "unstructured terminal output")
+
+    def _replay_blocked_execution_receipt(self, work_order_id: str) -> dict[str, Any]:
+        dispatch = self._latest_dispatch(work_order_id)
+        receipt = dispatch.get("receipt") if dispatch else None
+        if isinstance(receipt, dict) and receipt.get("response_type") == "question.blocked":
+            stored = dict(receipt)
+            stored["status"] = WorkStatus.WAITING_FOR_INPUT.value
+            stored["duplicate"] = True
+            return stored
+        raise WorkOrderValidationError(
+            f"Work order {work_order_id} is not eligible for execution refresh."
+        )
 
     def _ingest_failure(self, work_order: WorkOrder, run: ExecutionRunResult) -> dict[str, Any]:
         packet = self._trusted_response(

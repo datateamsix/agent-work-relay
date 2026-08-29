@@ -361,6 +361,137 @@ class ExecutionOrchestrationTests(unittest.TestCase):
         self.assertNotIn("sk-", timeline)
         _ = hashlib.sha256(PLAN_BODY.encode("utf-8")).hexdigest()
 
+    def test_blocked_receipt_replays_then_resumes_same_run(self) -> None:
+        work_order_id = self.harness.reach_ready_for_execution()
+        executor = self.harness.service.executor
+        executor.emit_blocked_then_complete = True
+        ack = self.harness.service.refresh_external_run(work_order_id, actor=SENDER)
+        self.harness.service.refresh_external_run(work_order_id, actor=SENDER)
+        blocked = self.harness.service.refresh_external_run(work_order_id, actor=SENDER)
+        self.assertEqual(blocked["response_type"], "question.blocked")
+        self.assertEqual(blocked["status"], WorkStatus.WAITING_FOR_INPUT.value)
+        self.assertEqual(executor.execution_polls, 2)
+        self.assertEqual(len(executor.execution_dispatches), 1)
+        dispatch = self.harness.store.list_execution_dispatches(work_order_id)[-1]
+        self.assertEqual(dispatch["attempt"], 1)
+        run_id = dispatch["provider_run_id"]
+        self.assertEqual(ack["status"], WorkStatus.EXECUTING.value)
+
+        replay = self.harness.service.refresh_external_run(work_order_id, actor=SENDER)
+        self.assertTrue(replay["duplicate"])
+        self.assertEqual(replay["content_sha256"], blocked["content_sha256"])
+        self.assertEqual(replay["response_type"], "question.blocked")
+        self.assertEqual(executor.execution_polls, 2)
+        self.assertEqual(len(executor.execution_dispatches), 1)
+        events = [
+            entry["event_type"]
+            for entry in self.harness.service.get_work_order_timeline(work_order_id, actor=SENDER)
+        ]
+        self.assertEqual(events.count("question.blocked"), 1)
+        self.assertEqual(events.count("plan.execute"), 1)
+
+        answered = self.harness.service.answer_question(work_order_id, actor=SENDER)
+        self.assertEqual(answered["status"], WorkStatus.EXECUTING.value)
+        completed = self.harness.service.refresh_external_run(work_order_id, actor=SENDER)
+        self.assertEqual(completed["response_type"], "execution.completed")
+        self.assertEqual(completed["status"], WorkStatus.COMPLETION_READY.value)
+        resumed = self.harness.store.list_execution_dispatches(work_order_id)[-1]
+        self.assertEqual(resumed["dispatch_id"], dispatch["dispatch_id"])
+        self.assertEqual(resumed["attempt"], 1)
+        self.assertEqual(resumed["provider_run_id"], run_id)
+        self.assertEqual(len(executor.execution_dispatches), 1)
+        self.assertEqual(executor.execution_polls, 3)
+        final_events = [
+            entry["event_type"]
+            for entry in self.harness.service.get_work_order_timeline(work_order_id, actor=SENDER)
+        ]
+        self.assertEqual(final_events.count("question.blocked"), 1)
+        self.assertEqual(final_events.count("question.answer"), 1)
+        self.assertEqual(final_events.count("execution.completed"), 1)
+        self.assertEqual(final_events.count("plan.execute"), 1)
+
+    def test_planning_blocked_refresh_is_not_an_execution_replay(self) -> None:
+        work_order_id = self.harness.accept_planning()
+        self.harness.submit(
+            response_type=ResponseType.QUESTION_BLOCKED,
+            work_order_id=work_order_id,
+            payload={"questions": [{"id": "q1", "text": "Which API?"}]},
+            actor=RECIPIENT,
+            idempotency_key="plan-blocked",
+        )
+        with self.assertRaisesRegex(WorkOrderValidationError, "not eligible"):
+            self.harness.service.refresh_external_run(work_order_id, actor=SENDER)
+
+    def test_canonical_recording_packet_is_accepted(self) -> None:
+        work_order_id = self.harness.reach_ready_for_execution()
+        self.harness.service.refresh_external_run(work_order_id, actor=SENDER)
+        self.harness.service.refresh_external_run(work_order_id, actor=SENDER)
+        completed = self.harness.service.refresh_external_run(work_order_id, actor=SENDER)
+        self.assertEqual(completed["response_type"], "execution.completed")
+        self.assertEqual(completed["status"], WorkStatus.COMPLETION_READY.value)
+        dispatch = self.harness.store.list_execution_dispatches(work_order_id)[-1]
+        packet = self.harness.service.executor.get_execution_run(
+            str(dispatch["provider_agent_id"]), str(dispatch["provider_run_id"])
+        )
+        assert packet.result is not None
+        self.assertTrue(packet.result.startswith("@response"))
+        self.assertIn("response_type: execution.completed", packet.result)
+        self.assertIn("authority: report_only", packet.result)
+        self.assertIn("Implementation completed.", packet.result)
+
+    def test_response_completed_sentinel_is_rejected(self) -> None:
+        self._assert_terminal_shortcut_rejected("@response-completed")
+
+    def test_empty_terminal_output_is_rejected(self) -> None:
+        self._assert_terminal_shortcut_rejected("")
+
+    def test_recorded_heading_is_rejected(self) -> None:
+        self._assert_terminal_shortcut_rejected("# Recorded execution completed")
+
+    def test_arbitrary_prose_is_rejected(self) -> None:
+        self._assert_terminal_shortcut_rejected("I implemented the feature.")
+
+    def test_git_metadata_without_packet_is_rejected(self) -> None:
+        self._assert_terminal_shortcut_rejected(
+            None,
+            git={
+                "repository": REPOSITORY,
+                "branch": "cursor/shortcut",
+                "base_ref": "main",
+                "commit_sha": "b" * 40,
+            },
+        )
+
+    def test_finished_status_alone_is_rejected(self) -> None:
+        self._assert_terminal_shortcut_rejected(None, git=None)
+
+    def _assert_terminal_shortcut_rejected(
+        self, result: str | None, *, git: dict[str, str] | None = None
+    ) -> None:
+        work_order_id = self.harness.reach_ready_for_execution()
+        self.harness.service.refresh_external_run(work_order_id, actor=SENDER)
+        self.harness.service.refresh_external_run(work_order_id, actor=SENDER)
+        executor = self.harness.service.executor
+        original = executor.get_execution_run
+
+        def wrapped(agent_id: str, exec_run_id: str) -> object:
+            current = original(agent_id, exec_run_id)
+            return type(current)(
+                executor_agent_id=current.executor_agent_id,
+                executor_run_id=current.executor_run_id,
+                executor=current.executor,
+                status=current.status,
+                result=result,
+                duration_ms=current.duration_ms,
+                git=git,
+            )
+
+        executor.get_execution_run = wrapped  # type: ignore[method-assign]
+        failed = self.harness.service.refresh_external_run(work_order_id, actor=SENDER)
+        self.assertEqual(failed["error"], "MALFORMED_EXECUTOR_RESPONSE")
+        self.assertEqual(failed["response_type"], "execution.failed")
+        self.assertEqual(self.harness.projection(work_order_id)["status"], WorkStatus.FAILED.value)
+
 
 if __name__ == "__main__":
     unittest.main()
