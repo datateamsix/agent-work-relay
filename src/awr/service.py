@@ -424,7 +424,7 @@ class BrokerService:
 
     def get_work_order(self, work_order_id: str, *, actor: str | None = None) -> dict[str, Any]:
         work_order = self._require_work_order(work_order_id)
-        resolved = self._read_actor(actor)
+        resolved = self._actor(actor)
         with self.store.lock_work_order(work_order_id) as session:
             snapshot = self._snapshot_from_session(session, work_order)
             self._authorize_reader(resolved, work_order, snapshot)
@@ -452,7 +452,7 @@ class BrokerService:
                 {**item, "work_order_id": work_order_id, "status": projection["status"]}
                 for item in projection["pending_actions"]
             ]
-        resolved = self._read_actor(actor)
+        resolved = self._actor(actor)
         pending: list[dict[str, Any]] = []
         for work_order in self.store.list_work_orders():
             try:
@@ -822,16 +822,11 @@ class BrokerService:
         work_order = self._require_work_order(work_order_id)
         if actor is None:
             return work_order
-        resolved = self._read_actor(actor)
+        resolved = self._actor(actor)
         with self.store.lock_work_order(work_order_id) as session:
             snapshot = self._snapshot_from_session(session, work_order)
             self._authorize_reader(resolved, work_order, snapshot)
         return work_order
-
-    def _read_actor(self, explicit: str | None) -> str:
-        if explicit:
-            return explicit
-        return self._actor(None)
 
     def _snapshot_from_session(
         self, session: WorkOrderSession, work_order: WorkOrder

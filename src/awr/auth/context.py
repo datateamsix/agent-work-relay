@@ -20,9 +20,9 @@ def current_principal() -> Principal | None:
 
 
 def resolve_actor(explicit: str | None) -> str:
+    if explicit:
+        return explicit
     principal = current_principal()
     if principal is not None:
         return principal.subject
-    if explicit:
-        return explicit
     raise ValueError("An authenticated actor or sender is required.")

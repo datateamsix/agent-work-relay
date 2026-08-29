@@ -70,9 +70,9 @@ Recipient, bound-agent, and other executor identities are rejected.
 
 ## Reads
 
-`get_work_order` and `list_pending_actions` authorize the explicit actor when
-one is supplied, otherwise the authenticated principal, as a work-order
-participant. HTTP GET `/v1/work-orders/{id}` and `/pending` accept `sender`.
+Reads and writes use an explicit actor when one is supplied, otherwise the
+authenticated principal. That identity must be a work-order participant.
+HTTP GET `/v1/work-orders/{id}` and `/pending` accept `sender`.
 `list_pending_actions` without `work_order_id` scans work orders the actor may
 read; calling it with neither an actor nor a work order ID is an error, not an
 empty list. `get_plan`, timeline, and artifact projections apply the same

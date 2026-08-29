@@ -132,7 +132,7 @@ class AuthorizationHardeningTests(unittest.TestCase):
                 rationale="Executor identities cannot approve.",
             )
 
-    def test_explicit_reader_wins_over_oauth_principal(self) -> None:
+    def test_explicit_actor_wins_over_oauth_principal(self) -> None:
         principal = Principal("static-operator", "awr-static", frozenset({"awr:read"}), {})
         token = set_current_principal(principal)
         try:
@@ -144,6 +144,28 @@ class AuthorizationHardeningTests(unittest.TestCase):
             self.assertEqual(pending, [])
             with self.assertRaisesRegex(WorkOrderValidationError, "not authorized"):
                 self.harness.service.get_work_order(self.work_order_id, actor=STRANGER)
+            _, _, receipt = self.harness.submit(
+                response_type=ResponseType.PLAN_COMPLETED,
+                work_order_id=self.work_order_id,
+                payload=plan_payload(),
+                actor=RECIPIENT,
+                idempotency_key="oauth-write-plan",
+            )
+            self.assertEqual(receipt["status"], WorkStatus.PLAN_READY.value)
+            requested = self.harness.service.request_plan_approval(self.work_order_id, actor=SENDER)
+            self.assertEqual(requested["status"], WorkStatus.WAITING_FOR_PLAN_APPROVAL.value)
+            lifecycle = self.harness.projection(self.work_order_id)["lifecycle"]
+            approved = self.harness.service.record_decision(
+                decision_type="approve_plan",
+                work_order_id=self.work_order_id,
+                actor=SENDER,
+                target_id=str(lifecycle["plan_id"]),
+                target_sha256=str(lifecycle["plan_sha256"]),
+                idempotency_key="oauth-write-approve",
+                permitted_action="plan.execute",
+                rationale="Explicit sender remains the decision principal under OAuth.",
+            )
+            self.assertEqual(approved["status"], WorkStatus.READY_FOR_EXECUTION.value)
         finally:
             reset_current_principal(token)
 
