@@ -8,14 +8,14 @@
 | Plan | `@response` + `plan.completed` | Immutable plan packet |
 | Clarify | `question.blocked` ↔ `question.answer` | Answered question receipt |
 | Revise | `plan.revise` → `plan.completed` | New plan version |
-| Approve | Restricted `record_decision` MCP call | Approval bound to plan hash |
-| Execute | `plan.execute` | Authorized executor run |
-| Acknowledge | `execution.acknowledged` | Durable run identifiers |
-| Work | Optional `execution.progress` | Meaningful checkpoint |
-| Complete | `execution.completed` or `execution.failed` | Completion packet |
-| Review | `completion.review` → `review.completed` | Approval or revision request |
-| Refine | `implementation.refine` | Follow-up execution in same lineage |
-| Close | Restricted decision or policy transition | Complete ledger timeline |
+| Approve | `plan.approval_requested` then `record_decision approve_plan` | Approval bound to the exact plan ID and SHA-256 |
+| Execute | `plan.execute` | `EXECUTION_DISPATCHED` — not yet executing |
+| Acknowledge | `execution.acknowledged` | Durable provider run; state becomes `EXECUTING` |
+| Work | Optional `execution.progress` | Meaningful checkpoint bound to that run |
+| Complete | `execution.completed` or `execution.failed` | `COMPLETION_READY` or `FAILED` |
+| Review | `completion.review` → `review.completed` | Recommendation only; does not close |
+| Refine | `implementation.refine` | Follow-up dispatch in the same lineage |
+| Close | Human `accept_completion` decision | `COMPLETE` |
 
 Do not require progress messages on every tool call or commit. Use them for a
 meaningful checkpoint, new risk, scope change, or long-running handoff.

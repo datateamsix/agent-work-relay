@@ -183,8 +183,22 @@ Bundle limits are 256 KiB Markdown, 10 MiB per artifact, 25 MiB total, and ten
 artifacts. Executors receive a reference manifest marked `not_delivered`.
 
 `awr.response/v1` schemas, canonical fingerprints, `@response` Markdown, and
-cache-key / ETag contracts exist in this slice. `submit_response` is not
-exposed; responses never grant execution, merge, or deployment authority.
+cache-key / ETag contracts are the only response contract family. Lifecycle
+tools now consume those packets:
+
+- `submit_response` (`awr:response`) — parse and persist an AS-03 packet;
+- `record_decision` (`awr:decide`) — store an authenticated approval, rejection,
+  cancellation, or completion acceptance;
+- `list_pending_actions` (`awr:read`) — derived next actions, including
+  `plan.approval_requested` as a broker event rather than a decision;
+- `get_work_order` (`awr:read`) — durable status, lifecycle snapshot, and
+  pending actions.
+
+Responses never grant execution, merge, or deployment authority. Execution
+enters `EXECUTING` only after `READY_FOR_EXECUTION` → `EXECUTION_DISPATCHED` →
+`execution.acknowledged`. Review approval does not close a work order.
+
+The lifecycle edge table is documented in [docs/AWR-LC-01B.md](docs/AWR-LC-01B.md).
 
 `submit_prompt_for_planning` accepts:
 

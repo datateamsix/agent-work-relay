@@ -61,8 +61,9 @@ slice.
 for planning and later execution/review packets. Responses are report-only:
 they never grant execution, merge, deployment, or destructive authority.
 Large logs, diffs, reports, and visual evidence are artifact references, not
-inline packet fields. `submit_response` and execution/review state transitions
-are not operational until AWR-LC-01.
+inline packet fields. `submit_response` parses packets with the AS-03
+`parse_response_markdown` path. Stored decisions, not responses, grant
+authority. See [docs/AWR-LC-01B.md](AWR-LC-01B.md).
 
 `ArtifactSecurityService.inspect` is the only path that may move an artifact
 from `QUARANTINED` to `SCANNING` or `CLEAN`. Intake (`ArtifactService`) writes
