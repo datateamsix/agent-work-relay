@@ -160,6 +160,20 @@ challenge when no bearer token is present.
 This step requires a human-authenticated `gcloud` session as a
 `modelready-m3` owner. The agent must not receive the Cursor API key.
 
+Preferred path — one script on an operator workstation with a browser:
+
+```bash
+./scripts/provision_cloud_run.sh --issuer https://your-tenant.auth0.com/
+```
+
+The provisioner installs the Cloud SDK if it is missing, runs `gcloud auth
+login`, creates `awr-runtime`, stores `awr-cursor-api-key`, deploys
+`agent-work-relay`, sets `AWR_PUBLIC_BASE_URL` / audience / `AWR_ALLOWED_HOSTS`
+to the assigned `*.run.app` URL, imports Firestore indexes, and runs
+`scripts/smoke_test.sh` against the public URL.
+
+Equivalent manual steps:
+
 ```bash
 gcloud auth login
 ./deploy/gcp_setup.sh
@@ -167,9 +181,8 @@ gcloud secrets versions add awr-cursor-api-key --data-file=-
 export AWR_OAUTH_ISSUER=https://your-tenant.auth0.com/
 export AWR_OAUTH_AUDIENCE=https://YOUR-SERVICE-URL/mcp
 export AWR_PUBLIC_BASE_URL=https://YOUR-SERVICE-URL
+export AWR_ALLOWED_HOSTS=YOUR-SERVICE-HOST
 ./deploy/gcp_deploy.sh
-gcloud firestore indexes composite create --project modelready-m3 || true
-# Prefer:
 gcloud firestore indexes composite import --source deploy/firestore.indexes.json
 ```
 

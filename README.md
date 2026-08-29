@@ -141,6 +141,20 @@ uv run awr mcp
 See [docs/LIVE_PROTOTYPE.md](docs/LIVE_PROTOTYPE.md) for the golden-test
 runbook, Cloud Run deployment, ChatGPT connection, and rollback instructions.
 
+### Provision Cloud Run (operator machine)
+
+From a workstation with a browser (not this Cloud Agent VM):
+
+```bash
+./scripts/provision_cloud_run.sh --issuer https://your-tenant.auth0.com/
+```
+
+The script installs `gcloud` if needed, opens Google login, creates the
+`awr-runtime` identity, stores the Cursor API key in Secret Manager, deploys
+`agent-work-relay`, imports Firestore indexes, and smokes `/healthz` plus an
+unauthenticated `/mcp` 401. Auth0 API/client setup remains a human step; the
+script prints the exact audience URL after deploy.
+
 Authorization-server selection is documented in [docs/AUTH.md](docs/AUTH.md).
 The PreM3 Clerk setup is not used; AWR is an OAuth resource server in front of
 a managed authorization server.

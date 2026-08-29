@@ -64,6 +64,11 @@ AWR_PUBLIC_BASE_URL=https://<awr-service>
 
 Do not invent a self-hosted identity provider inside AWR.
 
+To stand up the Cloud Run resource server first, run
+`./scripts/provision_cloud_run.sh --issuer https://<tenant>.auth0.com/`
+on an operator workstation. Use the printed `Audience` value as the Auth0 API
+identifier.
+
 ## Local tests
 
 `AWR_AUTH_MODE=static` exists only for local tests and recording demos. The
