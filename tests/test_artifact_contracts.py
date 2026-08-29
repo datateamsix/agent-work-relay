@@ -5,8 +5,11 @@ import unittest
 from awr.artifacts.contracts import (
     ArtifactPurpose,
     ArtifactReference,
+    ArtifactSecurityReceipt,
+    ArtifactSecurityVerdict,
     ArtifactStatus,
     allowed_transitions,
+    status_from_security_receipt,
 )
 
 
@@ -58,6 +61,38 @@ class ArtifactContractTests(unittest.TestCase):
         self.assertNotIn("bytes", payload)
         self.assertNotIn("url", payload)
         self.assertNotIn("path", payload)
+
+    def test_security_receipt_reason_maps_active_and_malformed(self) -> None:
+        malformed = ArtifactSecurityReceipt(
+            receipt_id="scr-1",
+            artifact_id="ART-1",
+            scanner_id="policy",
+            scanner_version="0",
+            signature_version="0",
+            verdict=ArtifactSecurityVerdict.INCONCLUSIVE,
+            reason_codes=("malformed",),
+            scanned_sha256="a" * 64,
+            started_at="2026-08-28T00:00:00+00:00",
+            completed_at="2026-08-28T00:00:00+00:00",
+            diagnostics={},
+        )
+        self.assertEqual(status_from_security_receipt(malformed), ArtifactStatus.REJECTED_MALFORMED)
+        active = ArtifactSecurityReceipt(
+            receipt_id="scr-2",
+            artifact_id="ART-1",
+            scanner_id="policy",
+            scanner_version="0",
+            signature_version="0",
+            verdict=ArtifactSecurityVerdict.INCONCLUSIVE,
+            reason_codes=("active_content",),
+            scanned_sha256="a" * 64,
+            started_at="2026-08-28T00:00:00+00:00",
+            completed_at="2026-08-28T00:00:00+00:00",
+            diagnostics={},
+        )
+        self.assertEqual(
+            status_from_security_receipt(active), ArtifactStatus.REJECTED_ACTIVE_CONTENT
+        )
 
 
 if __name__ == "__main__":

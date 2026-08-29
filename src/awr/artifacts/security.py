@@ -6,7 +6,6 @@ from uuid import uuid4
 
 from .clock import Clock, UtcClock
 from .contracts import (
-    REASON_EXPIRED_UNCLAIMED,
     REASON_EXTENSION_MISMATCH,
     REASON_MALWARE,
     REASON_POLYGLOT,
@@ -21,9 +20,10 @@ from .contracts import (
     ArtifactSecurityVerdict,
     ArtifactStatus,
     is_rejection,
+    status_from_security_receipt,
 )
 from .detect import DetectionResult, detect_family
-from .errors import ArtifactConflictError
+from .errors import ArtifactAccessError, ArtifactConflictError
 from .policy import control_authority_diagnostics, type_conflict_reason
 from .ports import ArtifactBodyStore, ArtifactMetadataStore
 from .scan import (
@@ -73,7 +73,7 @@ class ArtifactSecurityService:
             raise KeyError(f"Unknown artifact: {artifact_id}")
         existing = self._existing_terminal_receipt(current)
         if existing is not None:
-            return existing
+            return self._ensure_clean_body(existing)
 
         lease_id = str(uuid4())
         claim = self.metadata.claim_scan_lease(
@@ -100,7 +100,28 @@ class ArtifactSecurityService:
 
         started_at = self.clock.now().isoformat()
         artifact = self.metadata.get(artifact_id)
-        decision = self._evaluate(artifact)
+        try:
+            decision = self._evaluate(artifact)
+        except ArtifactAccessError:
+            decision = self._rejected(
+                ArtifactStatus.REJECTED_TAMPERING,
+                ArtifactSecurityVerdict.INCONCLUSIVE,
+                (REASON_TAMPERING,),
+                _unavailable_scan("missing_quarantine"),
+                None,
+                b"",
+                detail="missing_quarantine",
+            )
+        except Exception:  # noqa: BLE001
+            decision = self._rejected(
+                ArtifactStatus.REJECTED_SCANNER_UNAVAILABLE,
+                ArtifactSecurityVerdict.UNAVAILABLE,
+                (REASON_SCANNER_UNAVAILABLE,),
+                _unavailable_scan("scanner_exception"),
+                None,
+                b"",
+                detail="scanner_exception",
+            )
         completed_at = self.clock.now().isoformat()
         diagnostics = decision_status_diagnostics(decision.status, decision.diagnostics)
         receipt = ArtifactSecurityReceipt(
@@ -119,9 +140,9 @@ class ArtifactSecurityService:
         stored = self.metadata.put_security_receipt(receipt)
         if stored.receipt_id != receipt.receipt_id:
             return self._finish_from_receipt(artifact_id, claim.lease_id, stored)
-        status = _status_from_receipt(stored)
-        if status is ArtifactStatus.CLEAN:
-            self.bodies.promote_clean(artifact_id, claim.generation_sha256)
+        status = self._promote_clean_or_reject(
+            artifact_id, claim.generation_sha256, status_from_security_receipt(stored)
+        )
         detected = stored.diagnostics.get("detected_media_type")
         media_type = detected if isinstance(detected, str) else None
         self.metadata.complete_scan(
@@ -146,17 +167,40 @@ class ArtifactSecurityService:
                 return receipts[-1]
         return None
 
+    def _ensure_clean_body(self, receipt: ArtifactSecurityReceipt) -> ArtifactSecurityReceipt:
+        status = status_from_security_receipt(receipt)
+        if status is ArtifactStatus.CLEAN and not self.bodies.has_clean(
+            receipt.artifact_id, receipt.scanned_sha256
+        ):
+            self.bodies.promote_clean(receipt.artifact_id, receipt.scanned_sha256)
+        return receipt
+
+    def _promote_clean_or_reject(
+        self, artifact_id: str, sha256: str, status: ArtifactStatus
+    ) -> ArtifactStatus:
+        if status is not ArtifactStatus.CLEAN:
+            return status
+        try:
+            if not self.bodies.has_clean(artifact_id, sha256):
+                self.bodies.promote_clean(artifact_id, sha256)
+        except ArtifactAccessError:
+            return ArtifactStatus.REJECTED_TAMPERING
+        return status
+
     def _finish_from_receipt(
         self,
         artifact_id: str,
         lease_id: str,
         receipt: ArtifactSecurityReceipt,
     ) -> ArtifactSecurityReceipt:
-        status = _status_from_receipt(receipt)
-        if status is ArtifactStatus.CLEAN and not self.bodies.has_clean(
-            artifact_id, receipt.scanned_sha256
+        current = self.metadata.get(artifact_id)
+        if current is not None and (
+            current.status is ArtifactStatus.CLEAN or is_rejection(current.status)
         ):
-            self.bodies.promote_clean(artifact_id, receipt.scanned_sha256)
+            return self._ensure_clean_body(receipt)
+        status = self._promote_clean_or_reject(
+            artifact_id, receipt.scanned_sha256, status_from_security_receipt(receipt)
+        )
         detected = receipt.diagnostics.get("detected_media_type")
         media_type = detected if isinstance(detected, str) else None
         self.metadata.complete_scan(
@@ -327,26 +371,6 @@ def _verdict_for_status(status: ArtifactStatus) -> ArtifactSecurityVerdict:
     if status is ArtifactStatus.REJECTED_SCANNER_UNAVAILABLE:
         return ArtifactSecurityVerdict.UNAVAILABLE
     return ArtifactSecurityVerdict.INCONCLUSIVE
-
-
-def _status_from_receipt(receipt: ArtifactSecurityReceipt) -> ArtifactStatus:
-    raw = receipt.diagnostics.get("artifact_status")
-    if isinstance(raw, str):
-        return ArtifactStatus(raw)
-    if receipt.verdict is ArtifactSecurityVerdict.CLEAN:
-        return ArtifactStatus.CLEAN
-    reasons = set(receipt.reason_codes)
-    if REASON_MALWARE in reasons:
-        return ArtifactStatus.REJECTED_MALWARE
-    if REASON_TAMPERING in reasons:
-        return ArtifactStatus.REJECTED_TAMPERING
-    if REASON_SIZE in reasons:
-        return ArtifactStatus.REJECTED_SIZE
-    if receipt.verdict is ArtifactSecurityVerdict.UNAVAILABLE:
-        return ArtifactStatus.REJECTED_SCANNER_UNAVAILABLE
-    if REASON_EXPIRED_UNCLAIMED in reasons:
-        return ArtifactStatus.REJECTED_SCANNER_UNAVAILABLE
-    return ArtifactStatus.REJECTED_TYPE
 
 
 def _diagnostics(

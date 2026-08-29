@@ -51,15 +51,16 @@ MAX_IMAGE_HEIGHT = 8192
 MAX_IMAGE_PIXELS = 4096 * 4096
 MAX_IMAGE_METADATA = 64 * 1024
 _ALLOWED_TEXT_CONTROLS = frozenset({9, 10, 13})
-_PDF_ACTIVE_MARKERS = (
-    b"/JavaScript",
-    b"/JS",
-    b"/Launch",
-    b"/EmbeddedFiles",
-    b"/RichMedia",
-    b"/OpenAction",
-    b"/AA",
-    b"/Encrypt",
+_PDF_NAME_DELIMITERS = frozenset(b" \t\r\n()<>[]{}/%")
+_PDF_ACTIVE_NAMES = (
+    b"JavaScript",
+    b"JS",
+    b"Launch",
+    b"EmbeddedFiles",
+    b"RichMedia",
+    b"OpenAction",
+    b"AA",
+    b"Encrypt",
 )
 
 
@@ -207,10 +208,23 @@ def validate_image(payload: bytes, *, expected: str) -> ValidationResult:
     return _ok()
 
 
+def _has_pdf_name(payload: bytes, name: bytes) -> bool:
+    token = b"/" + name
+    start = 0
+    while True:
+        index = payload.find(token, start)
+        if index < 0:
+            return False
+        end = index + len(token)
+        if end == len(payload) or payload[end] in _PDF_NAME_DELIMITERS:
+            return True
+        start = index + 1
+
+
 def validate_pdf(payload: bytes) -> ValidationResult:
-    for marker in _PDF_ACTIVE_MARKERS:
-        if marker in payload:
-            if marker == b"/Encrypt":
+    for name in _PDF_ACTIVE_NAMES:
+        if _has_pdf_name(payload, name):
+            if name == b"Encrypt":
                 return _active("pdf_encrypted")
             return _active("pdf_active_content")
     if PdfReader is None:

@@ -94,6 +94,215 @@ class ArtifactSecurityRecoveryTests(unittest.TestCase):
         self.assertEqual(loaded.status, ArtifactStatus.REJECTED_TAMPERING)
         self.assertFalse(self.bodies.has_clean(self.artifact_id, self.digest))
 
+    def test_missing_quarantine_fails_closed_as_tampering(self) -> None:
+        self.bodies.delete_generation(self.artifact_id, self.digest)
+        self.security.inspect(self.artifact_id)
+        loaded = self.metadata.get(self.artifact_id)
+        assert loaded is not None
+        self.assertEqual(loaded.status, ArtifactStatus.REJECTED_TAMPERING)
+        self.assertFalse(self.bodies.has_clean(self.artifact_id, self.digest))
+
+    def test_complete_scan_follows_rejected_receipt_not_caller_status(self) -> None:
+        now = datetime.now(UTC).isoformat()
+        past = (self.clock.now() - timedelta(seconds=120)).isoformat()
+        self.metadata.put_security_receipt(
+            ArtifactSecurityReceipt(
+                receipt_id=f"scr-{uuid4()}",
+                artifact_id=self.artifact_id,
+                scanner_id="retention",
+                scanner_version="1",
+                signature_version="0",
+                verdict=ArtifactSecurityVerdict.UNAVAILABLE,
+                reason_codes=("scanner_unavailable",),
+                scanned_sha256=self.digest,
+                started_at=now,
+                completed_at=now,
+                diagnostics={
+                    "artifact_status": ArtifactStatus.REJECTED_SCANNER_UNAVAILABLE.value,
+                },
+            )
+        )
+        with sqlite3.connect(self.db_path) as connection:
+            connection.execute(
+                """
+                UPDATE artifacts
+                SET status = ?, scan_lease_id = ?, scan_lease_expires_at = ?
+                WHERE artifact_id = ?
+                """,
+                (ArtifactStatus.SCANNING.value, "other", past, self.artifact_id),
+            )
+            connection.commit()
+        completed = self.metadata.complete_scan(
+            self.artifact_id,
+            lease_id="attacker",
+            status=ArtifactStatus.CLEAN,
+            detected_media_type="text/plain",
+            now=self.clock.now(),
+        )
+        self.assertEqual(completed.status, ArtifactStatus.REJECTED_SCANNER_UNAVAILABLE)
+        self.assertFalse(self.bodies.has_clean(self.artifact_id, self.digest))
+
+    def test_retention_completes_stuck_scanning_from_existing_receipt(self) -> None:
+        now = datetime.now(UTC).isoformat()
+        past = (self.clock.now() - timedelta(seconds=120)).isoformat()
+        self.metadata.put_security_receipt(
+            ArtifactSecurityReceipt(
+                receipt_id=f"scr-{uuid4()}",
+                artifact_id=self.artifact_id,
+                scanner_id="fake-clean",
+                scanner_version="1",
+                signature_version="1",
+                verdict=ArtifactSecurityVerdict.CLEAN,
+                reason_codes=(),
+                scanned_sha256=self.digest,
+                started_at=now,
+                completed_at=now,
+                diagnostics={
+                    "artifact_status": ArtifactStatus.CLEAN.value,
+                    "detected_media_type": "text/plain",
+                },
+            )
+        )
+        with sqlite3.connect(self.db_path) as connection:
+            connection.execute(
+                """
+                UPDATE artifacts
+                SET status = ?, scan_lease_id = ?, scan_lease_expires_at = ?
+                WHERE artifact_id = ?
+                """,
+                (ArtifactStatus.SCANNING.value, "crashed", past, self.artifact_id),
+            )
+            connection.commit()
+        ArtifactRetention(
+            self.metadata,
+            self.bodies,
+            clock=self.clock,
+            declare_ttl_seconds=86400,
+            clean_ttl_seconds=604800,
+        ).purge()
+        loaded = self.metadata.get(self.artifact_id)
+        assert loaded is not None
+        self.assertEqual(loaded.status, ArtifactStatus.CLEAN)
+        self.assertTrue(self.bodies.has_clean(self.artifact_id, self.digest))
+
+    def test_complete_scan_can_fail_closed_over_unpromotable_clean_receipt(self) -> None:
+        now = datetime.now(UTC).isoformat()
+        past = (self.clock.now() - timedelta(seconds=120)).isoformat()
+        self.metadata.put_security_receipt(
+            ArtifactSecurityReceipt(
+                receipt_id=f"scr-{uuid4()}",
+                artifact_id=self.artifact_id,
+                scanner_id="fake-clean",
+                scanner_version="1",
+                signature_version="1",
+                verdict=ArtifactSecurityVerdict.CLEAN,
+                reason_codes=(),
+                scanned_sha256=self.digest,
+                started_at=now,
+                completed_at=now,
+                diagnostics={"artifact_status": ArtifactStatus.CLEAN.value},
+            )
+        )
+        with sqlite3.connect(self.db_path) as connection:
+            connection.execute(
+                """
+                UPDATE artifacts
+                SET status = ?, scan_lease_id = ?, scan_lease_expires_at = ?
+                WHERE artifact_id = ?
+                """,
+                (ArtifactStatus.SCANNING.value, "crashed", past, self.artifact_id),
+            )
+            connection.commit()
+        completed = self.metadata.complete_scan(
+            self.artifact_id,
+            lease_id="retention",
+            status=ArtifactStatus.REJECTED_TAMPERING,
+            detected_media_type="text/plain",
+            now=self.clock.now(),
+        )
+        self.assertEqual(completed.status, ArtifactStatus.REJECTED_TAMPERING)
+        self.assertFalse(self.bodies.has_clean(self.artifact_id, self.digest))
+
+    def test_retention_fail_closes_clean_receipt_when_quarantine_is_gone(self) -> None:
+        now = datetime.now(UTC).isoformat()
+        past = (self.clock.now() - timedelta(seconds=120)).isoformat()
+        self.metadata.put_security_receipt(
+            ArtifactSecurityReceipt(
+                receipt_id=f"scr-{uuid4()}",
+                artifact_id=self.artifact_id,
+                scanner_id="fake-clean",
+                scanner_version="1",
+                signature_version="1",
+                verdict=ArtifactSecurityVerdict.CLEAN,
+                reason_codes=(),
+                scanned_sha256=self.digest,
+                started_at=now,
+                completed_at=now,
+                diagnostics={"artifact_status": ArtifactStatus.CLEAN.value},
+            )
+        )
+        with sqlite3.connect(self.db_path) as connection:
+            connection.execute(
+                """
+                UPDATE artifacts
+                SET status = ?, scan_lease_id = ?, scan_lease_expires_at = ?
+                WHERE artifact_id = ?
+                """,
+                (ArtifactStatus.SCANNING.value, "crashed", past, self.artifact_id),
+            )
+            connection.commit()
+        self.bodies.delete_generation(self.artifact_id, self.digest)
+        ArtifactRetention(
+            self.metadata,
+            self.bodies,
+            clock=self.clock,
+            declare_ttl_seconds=86400,
+            clean_ttl_seconds=604800,
+        ).purge()
+        loaded = self.metadata.get(self.artifact_id)
+        assert loaded is not None
+        self.assertEqual(loaded.status, ArtifactStatus.REJECTED_TAMPERING)
+        self.assertFalse(self.bodies.has_clean(self.artifact_id, self.digest))
+
+    def test_inspect_repairs_clean_status_without_promoted_body(self) -> None:
+        now = datetime.now(UTC).isoformat()
+        self.metadata.put_security_receipt(
+            ArtifactSecurityReceipt(
+                receipt_id=f"scr-{uuid4()}",
+                artifact_id=self.artifact_id,
+                scanner_id="fake-clean",
+                scanner_version="1",
+                signature_version="1",
+                verdict=ArtifactSecurityVerdict.CLEAN,
+                reason_codes=(),
+                scanned_sha256=self.digest,
+                started_at=now,
+                completed_at=now,
+                diagnostics={
+                    "artifact_status": ArtifactStatus.CLEAN.value,
+                    "detected_media_type": "text/plain",
+                    "control_authority": "primary_markdown_only",
+                },
+            )
+        )
+        with sqlite3.connect(self.db_path) as connection:
+            connection.execute(
+                """
+                UPDATE artifacts
+                SET status = ?, scan_lease_id = NULL, scan_lease_expires_at = NULL
+                WHERE artifact_id = ?
+                """,
+                (ArtifactStatus.CLEAN.value, self.artifact_id),
+            )
+            connection.commit()
+        self.assertFalse(self.bodies.has_clean(self.artifact_id, self.digest))
+        receipt = self.security.inspect(self.artifact_id)
+        loaded = self.metadata.get(self.artifact_id)
+        assert loaded is not None
+        self.assertEqual(loaded.status, ArtifactStatus.CLEAN)
+        self.assertEqual(receipt.verdict, ArtifactSecurityVerdict.CLEAN)
+        self.assertTrue(self.bodies.has_clean(self.artifact_id, self.digest))
+
     def test_persisted_receipt_wins_over_local_clean_decision(self) -> None:
         now = datetime.now(UTC).isoformat()
         original = self.metadata.put_security_receipt

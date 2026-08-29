@@ -158,6 +158,36 @@ class ArtifactSecurityReceipt:
         return payload
 
 
+def status_from_security_receipt(receipt: ArtifactSecurityReceipt) -> ArtifactStatus:
+    raw = receipt.diagnostics.get("artifact_status")
+    if isinstance(raw, str):
+        try:
+            return ArtifactStatus(raw)
+        except ValueError:
+            pass
+    if receipt.verdict is ArtifactSecurityVerdict.CLEAN:
+        return ArtifactStatus.CLEAN
+    reasons = set(receipt.reason_codes)
+    if REASON_MALWARE in reasons:
+        return ArtifactStatus.REJECTED_MALWARE
+    if REASON_TAMPERING in reasons:
+        return ArtifactStatus.REJECTED_TAMPERING
+    if REASON_SIZE in reasons:
+        return ArtifactStatus.REJECTED_SIZE
+    if REASON_ACTIVE_CONTENT in reasons:
+        return ArtifactStatus.REJECTED_ACTIVE_CONTENT
+    if REASON_MALFORMED in reasons:
+        return ArtifactStatus.REJECTED_MALFORMED
+    if (
+        receipt.verdict is ArtifactSecurityVerdict.UNAVAILABLE
+        or REASON_SCANNER_UNAVAILABLE in reasons
+        or REASON_SCANNER_TIMEOUT in reasons
+        or REASON_EXPIRED_UNCLAIMED in reasons
+    ):
+        return ArtifactStatus.REJECTED_SCANNER_UNAVAILABLE
+    return ArtifactStatus.REJECTED_TYPE
+
+
 @dataclass(frozen=True, slots=True)
 class ScanClaim:
     artifact_id: str

@@ -7,6 +7,7 @@ from .contracts import (
     ArtifactSecurityVerdict,
     ArtifactStatus,
     ScanClaim,
+    status_from_security_receipt,
 )
 from .errors import (
     ArtifactAccessError,
@@ -34,4 +35,5 @@ __all__ = [
     "ArtifactStatus",
     "ArtifactTooLargeError",
     "ScanClaim",
+    "status_from_security_receipt",
 ]

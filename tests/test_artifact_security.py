@@ -247,6 +247,22 @@ class ArtifactSecurityTests(unittest.TestCase):
         assert loaded is not None
         self.assertEqual(loaded.status, ArtifactStatus.REJECTED_SCANNER_UNAVAILABLE)
 
+    def test_scanner_exception_fails_closed(self) -> None:
+        class _BoomScanner:
+            def scan(self, payload: bytes) -> object:
+                del payload
+                raise RuntimeError("scanner crashed")
+
+        self.stack.close()
+        self.stack = _Stack(scanner=_BoomScanner())
+        artifact_id = self.stack.quarantine(
+            b"ok text\n", filename="notes.txt", media_type="text/plain", key="boom"
+        )
+        self.stack.security.inspect(artifact_id)
+        loaded = self.stack.metadata.get(artifact_id)
+        assert loaded is not None
+        self.assertEqual(loaded.status, ArtifactStatus.REJECTED_SCANNER_UNAVAILABLE)
+
     def test_scanner_malformed_fails_closed(self) -> None:
         self.stack.close()
         self.stack = _Stack(scanner=MalformedScanner())
@@ -326,6 +342,14 @@ class ArtifactSecurityTests(unittest.TestCase):
         loaded = self.stack.metadata.get(artifact_id)
         assert loaded is not None
         self.assertEqual(loaded.status, ArtifactStatus.REJECTED_ACTIVE_CONTENT)
+
+    def test_pdf_active_markers_require_name_tokens(self) -> None:
+        from awr.artifacts.validate import validate_pdf
+
+        substring = b"%PDF-1.4\n1 0 obj<</Type/Catalog>>endobj\n/JSxyz\n%%EOF\n"
+        self.assertNotEqual(validate_pdf(substring).status, ArtifactStatus.REJECTED_ACTIVE_CONTENT)
+        token = b"%PDF-1.4\n1 0 obj<</Type/Catalog/OpenAction<</S/JS /JS (1)>>>>endobj\n%%EOF\n"
+        self.assertEqual(validate_pdf(token).status, ArtifactStatus.REJECTED_ACTIVE_CONTENT)
 
     def test_javascript_pdf_is_rejected(self) -> None:
         artifact_id = self.stack.quarantine(
@@ -437,6 +461,7 @@ class ArtifactSecurityTests(unittest.TestCase):
         root = Path(__file__).resolve().parents[1] / "src" / "awr"
         allowed = {
             root / "artifacts" / "ports.py",
+            root / "artifacts" / "retention.py",
             root / "artifacts" / "security.py",
             root / "storage" / "artifact_fs.py",
             root / "storage" / "quarantine_only.py",

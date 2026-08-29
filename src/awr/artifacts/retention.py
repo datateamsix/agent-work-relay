@@ -12,7 +12,9 @@ from ..artifacts.contracts import (
     ArtifactSecurityVerdict,
     ArtifactStatus,
     is_rejection,
+    status_from_security_receipt,
 )
+from ..artifacts.errors import ArtifactAccessError
 from ..artifacts.ports import ArtifactBodyStore, ArtifactMetadataStore
 
 _ACTOR = "broker:awr"
@@ -46,7 +48,31 @@ class ArtifactRetention:
     def _purge_one(self, artifact: Artifact, now: datetime) -> int:
         age = _age_seconds(artifact.created_at, now)
         if artifact.status is ArtifactStatus.SCANNING:
-            if self._expired_scan_without_receipt(artifact, now):
+            receipt = None
+            if artifact.sha256:
+                receipt = self.metadata.get_security_receipt_for_digest(
+                    artifact.artifact_id, artifact.sha256
+                )
+            if receipt is not None and self._lease_expired_or_missing(artifact, now):
+                status = status_from_security_receipt(receipt)
+                if (
+                    status is ArtifactStatus.CLEAN
+                    and artifact.sha256
+                    and not self.bodies.has_clean(artifact.artifact_id, artifact.sha256)
+                ):
+                    try:
+                        self.bodies.promote_clean(artifact.artifact_id, artifact.sha256)
+                    except ArtifactAccessError:
+                        status = ArtifactStatus.REJECTED_TAMPERING
+                self.metadata.complete_scan(
+                    artifact.artifact_id,
+                    lease_id=artifact.scan_lease_id or "",
+                    status=status,
+                    detected_media_type=artifact.detected_media_type,
+                    now=now,
+                )
+                artifact = self.metadata.get(artifact.artifact_id) or artifact
+            elif self._expired_scan_without_receipt(artifact, now):
                 self._reject_unavailable(artifact, now, REASON_SCANNER_UNAVAILABLE)
                 artifact = self.metadata.get(artifact.artifact_id) or artifact
             else:
@@ -73,6 +99,10 @@ class ArtifactRetention:
             )
             if receipt is not None:
                 return False
+        return self._lease_expired_or_missing(artifact, now)
+
+    @staticmethod
+    def _lease_expired_or_missing(artifact: Artifact, now: datetime) -> bool:
         expires = artifact.scan_lease_expires_at
         if not expires:
             return True

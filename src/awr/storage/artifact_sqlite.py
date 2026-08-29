@@ -19,6 +19,7 @@ from ..artifacts.contracts import (
     allowed_transitions,
     is_orchestrator_status,
     is_rejection,
+    status_from_security_receipt,
 )
 from ..artifacts.errors import ArtifactError
 from .sqlite import SQLiteStateStore
@@ -306,6 +307,13 @@ class SQLiteArtifactMetadataStore:
                 raise ArtifactError(f"Cannot complete scan from status {artifact.status.value}.")
             digest = artifact.sha256 or ""
             receipt = self._security_receipt_on_connection(connection, artifact_id, digest)
+            if receipt is not None:
+                bound = status_from_security_receipt(receipt)
+                # A CLEAN receipt cannot be upgraded from a caller CLEAN/SCANNING
+                # claim, but a fail-closed rejection may override CLEAN when the
+                # quarantined generation is gone and cannot be promoted.
+                if not (is_rejection(status) and bound is ArtifactStatus.CLEAN):
+                    status = bound
             lease_ok = (
                 artifact.scan_lease_id == lease_id
                 or not artifact.scan_lease_id
@@ -314,6 +322,8 @@ class SQLiteArtifactMetadataStore:
             )
             if not lease_ok:
                 raise ArtifactError("Scan lease does not match this worker.")
+            if receipt is None and status is ArtifactStatus.CLEAN:
+                raise ArtifactError("Cannot mark an artifact CLEAN without a security receipt.")
             connection.execute(
                 """
                 UPDATE artifacts
