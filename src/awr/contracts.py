@@ -45,6 +45,7 @@ class Directive:
     kind: WorkKind
     action: WorkAction
     parent_work_order_id: str | None = None
+    form: str = "awr_alias"
 
     @property
     def name(self) -> str:
@@ -69,6 +70,7 @@ class WorkOrder:
     wrapper_sha256: str
     status: WorkStatus
     created_at: str
+    bundle_sha256: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -165,6 +167,7 @@ class SubmissionReceipt:
     duplicate: bool
     executor_run_id: str | None
     ledger_sequence: int
+    bundle_sha256: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)

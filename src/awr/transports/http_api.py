@@ -1,13 +1,16 @@
 from __future__ import annotations
 
+import io
 from typing import Any
 
-from ..service import BrokerService
+from ..artifacts.errors import ArtifactError, ArtifactTicketError
+from ..service import BrokerService, WorkOrderValidationError
 
 
 def create_app(service: BrokerService) -> Any:
     try:
-        from fastapi import FastAPI
+        from fastapi import FastAPI, Header, Request
+        from fastapi.responses import JSONResponse
     except ImportError as exc:
         raise RuntimeError("Install the HTTP transport with: uv sync --extra api") from exc
 
@@ -42,5 +45,65 @@ def create_app(service: BrokerService) -> Any:
     @app.get("/v1/planning/{work_order_id}/timeline")
     def get_timeline(work_order_id: str) -> list[dict[str, Any]]:
         return service.get_work_order_timeline(work_order_id)
+
+    @app.get("/v1/planning/{work_order_id}/artifacts")
+    def get_artifacts(work_order_id: str) -> list[dict[str, Any]]:
+        return service.get_work_order_artifacts(work_order_id)
+
+    @app.post("/v1/artifacts")
+    def begin_artifact(payload: dict[str, Any]) -> dict[str, Any]:
+        return service.begin_artifact_intake(
+            owner=payload.get("sender") or payload.get("owner"),
+            original_filename=str(payload["original_filename"]),
+            declared_media_type=str(payload["declared_media_type"]),
+            purpose=str(payload["purpose"]),
+            idempotency_key=str(payload["idempotency_key"]),
+            expected_byte_length=payload.get("expected_byte_length"),
+            expected_sha256=payload.get("expected_sha256"),
+        )
+
+    @app.put("/v1/artifacts/{artifact_id}/content")
+    async def upload_artifact(
+        artifact_id: str,
+        request: Request,
+        x_awr_upload_token: str | None = Header(default=None),
+    ) -> Any:
+        if not x_awr_upload_token:
+            return JSONResponse({"error": "Upload token required."}, status_code=400)
+        body = await request.body()
+        try:
+            return service.upload_artifact_content(
+                artifact_id, io.BytesIO(body), token=x_awr_upload_token
+            )
+        except ArtifactTicketError as exc:
+            status = 409 if "spent" in str(exc).lower() else 403
+            if "expired" in str(exc).lower():
+                status = 410
+            return JSONResponse({"error": str(exc)}, status_code=status)
+        except (ArtifactError, WorkOrderValidationError) as exc:
+            return JSONResponse({"error": str(exc)}, status_code=400)
+
+    @app.post("/v1/artifacts/{artifact_id}/finalize")
+    def finalize_artifact(artifact_id: str) -> dict[str, Any]:
+        return service.finalize_artifact_upload(artifact_id)
+
+    @app.get("/v1/artifacts/{artifact_id}")
+    def artifact_status(artifact_id: str) -> dict[str, Any]:
+        return service.get_artifact_status(artifact_id)
+
+    @app.post("/v1/work-bundles")
+    def submit_bundle(payload: dict[str, Any]) -> dict[str, Any]:
+        receipt = service.submit_work_bundle_for_planning(
+            markdown=str(payload["markdown"]),
+            sender=payload.get("sender"),
+            recipient=str(payload["recipient"]),
+            repository_url=(
+                str(payload["repository_url"]) if payload.get("repository_url") else None
+            ),
+            base_ref=str(payload["base_ref"]) if payload.get("base_ref") else None,
+            idempotency_key=payload.get("idempotency_key"),
+            artifact_ids=payload.get("artifact_ids") or [],
+        )
+        return receipt.to_dict()
 
     return app

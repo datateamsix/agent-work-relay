@@ -18,10 +18,11 @@ ALLOWED_FAMILIES = frozenset(
 )
 
 AWR_DIRECTIVE_MARK = b"@awr"
+INPUT_DIRECTIVE_MARK = b"@input"
 
 
 def contains_awr_directive_text(payload: bytes) -> bool:
-    return AWR_DIRECTIVE_MARK in payload
+    return AWR_DIRECTIVE_MARK in payload or INPUT_DIRECTIVE_MARK in payload
 
 
 def control_authority_diagnostics(payload: bytes) -> dict[str, object]:

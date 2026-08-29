@@ -28,7 +28,8 @@ CREATE TABLE IF NOT EXISTS work_orders (
     wrapper_version TEXT NOT NULL,
     wrapper_sha256 TEXT NOT NULL,
     status TEXT NOT NULL,
-    created_at TEXT NOT NULL
+    created_at TEXT NOT NULL,
+    bundle_sha256 TEXT
 );
 
 CREATE TABLE IF NOT EXISTS ledger (
@@ -57,6 +58,9 @@ ON ledger(work_order_id) WHERE event_type = 'plan.received';
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_ledger_unique_plan_available
 ON ledger(work_order_id) WHERE event_type = 'plan.available';
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_ledger_unique_bundle_validated
+ON ledger(work_order_id) WHERE event_type = 'bundle.validated';
 """
 
 _ARTIFACT_SCHEMA = """
@@ -134,6 +138,21 @@ ON artifact_receipts(artifact_id) WHERE event_type = 'artifact.promoted';
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_artifact_security_receipts_digest
 ON artifact_security_receipts(artifact_id, scanned_sha256);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_artifact_receipts_relay_authorized
+ON artifact_receipts(artifact_id, work_order_id)
+WHERE event_type = 'artifact.relay_authorized';
+
+CREATE TABLE IF NOT EXISTS artifact_upload_tickets (
+    ticket_id TEXT PRIMARY KEY,
+    artifact_id TEXT NOT NULL UNIQUE,
+    owner TEXT NOT NULL,
+    token_hash TEXT NOT NULL,
+    expires_at TEXT NOT NULL,
+    spent_at TEXT,
+    max_bytes INTEGER NOT NULL,
+    FOREIGN KEY (artifact_id) REFERENCES artifacts(artifact_id)
+);
 """
 
 
@@ -159,6 +178,8 @@ class SQLiteStateStore:
             connection.execute(
                 "ALTER TABLE work_orders ADD COLUMN base_ref TEXT NOT NULL DEFAULT 'main'"
             )
+        if "bundle_sha256" not in columns:
+            connection.execute("ALTER TABLE work_orders ADD COLUMN bundle_sha256 TEXT")
         connection.execute(
             """
             CREATE UNIQUE INDEX IF NOT EXISTS idx_ledger_unique_routed
@@ -181,6 +202,12 @@ class SQLiteStateStore:
             """
             CREATE UNIQUE INDEX IF NOT EXISTS idx_ledger_unique_plan_available
             ON ledger(work_order_id) WHERE event_type = 'plan.available'
+            """
+        )
+        connection.execute(
+            """
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_ledger_unique_bundle_validated
+            ON ledger(work_order_id) WHERE event_type = 'bundle.validated'
             """
         )
         connection.executescript(_ARTIFACT_SCHEMA)
@@ -244,8 +271,8 @@ class SQLiteStateStore:
                     work_order_id, idempotency_key, sender, recipient, kind, action,
                     parent_work_order_id, repository_url, base_ref, markdown,
                     content_sha256, wrapper_id, wrapper_version, wrapper_sha256,
-                    status, created_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    status, created_at, bundle_sha256
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     work_order.work_order_id,
@@ -264,18 +291,22 @@ class SQLiteStateStore:
                     work_order.wrapper_sha256,
                     work_order.status.value,
                     work_order.created_at,
+                    work_order.bundle_sha256,
                 ),
             )
+            accepted_payload = {
+                "content_sha256": work_order.content_sha256,
+                "wrapper": f"{work_order.wrapper_id}@{work_order.wrapper_version}",
+            }
+            if work_order.bundle_sha256 is not None:
+                accepted_payload["bundle_sha256"] = work_order.bundle_sha256
             sequence = self._append_ledger_on_connection(
                 connection=connection,
                 work_order_id=work_order.work_order_id,
                 event_type="work_order.accepted",
                 actor=work_order.sender,
                 counterparty="broker:awr",
-                payload={
-                    "content_sha256": work_order.content_sha256,
-                    "wrapper": f"{work_order.wrapper_id}@{work_order.wrapper_version}",
-                },
+                payload=accepted_payload,
             ).sequence
             return work_order, True, sequence
 
@@ -388,6 +419,7 @@ class SQLiteStateStore:
             wrapper_sha256=row["wrapper_sha256"],
             status=WorkStatus(row["status"]),
             created_at=row["created_at"],
+            bundle_sha256=_optional_work_order_str(row, "bundle_sha256"),
         )
 
     @staticmethod
@@ -402,6 +434,16 @@ class SQLiteStateStore:
             payload=json.loads(row["payload_json"]),
             created_at=row["created_at"],
         )
+
+
+def _optional_work_order_str(row: sqlite3.Row, name: str) -> str | None:
+    try:
+        value = row[name]
+    except (IndexError, KeyError):
+        return None
+    if value is None:
+        return None
+    return str(value)
 
 
 class _SQLiteWorkOrderSession:

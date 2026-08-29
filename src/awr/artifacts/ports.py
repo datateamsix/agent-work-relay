@@ -10,6 +10,7 @@ from .contracts import (
     ArtifactReceipt,
     ArtifactSecurityReceipt,
     ArtifactStatus,
+    ArtifactUploadTicket,
     ScanClaim,
 )
 
@@ -88,6 +89,12 @@ class ArtifactMetadataStore(Protocol):
     def list_receipts(self, artifact_id: str) -> list[ArtifactReceipt]: ...
 
     def lock_artifact(self, artifact_id: str) -> AbstractContextManager[ArtifactSession]: ...
+
+    def put_upload_ticket(self, ticket: ArtifactUploadTicket) -> ArtifactUploadTicket: ...
+
+    def get_upload_ticket(self, artifact_id: str) -> ArtifactUploadTicket | None: ...
+
+    def spend_upload_ticket(self, artifact_id: str, *, now: datetime) -> ArtifactUploadTicket: ...
 
 
 class ArtifactBodyStore(Protocol):

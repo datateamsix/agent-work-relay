@@ -33,6 +33,51 @@ class DirectiveTests(unittest.TestCase):
         with self.assertRaisesRegex(DirectiveError, "@awr"):
             parse_directive("@ewb feature.plan\n\n# Legacy directive")
 
+    def test_input_feature_plan_is_canonical(self) -> None:
+        markdown = """@input
+---
+awr:
+  schema: awr.input/v1
+  intent: feature.plan
+  requested_authority: plan_only
+---
+
+# Feature
+"""
+        directive = parse_directive(markdown)
+        self.assertEqual(directive.kind, WorkKind.FEATURE)
+        self.assertEqual(directive.form, "input")
+        self.assertIsNone(directive.parent_work_order_id)
+
+    def test_input_message_type_alias_and_refinement_parent(self) -> None:
+        markdown = """@input
+
+---
+awr:
+  schema_version: awr.message/v1
+  message_type: refinement.plan
+  parent_work_order_id: AWR-123
+---
+
+Tighten tests
+"""
+        directive = parse_directive(markdown)
+        self.assertEqual(directive.parent_work_order_id, "AWR-123")
+        self.assertEqual(directive.form, "input")
+
+    def test_input_rejects_execution_intent(self) -> None:
+        with self.assertRaisesRegex(DirectiveError, "unsupported"):
+            parse_directive(
+                """@input
+---
+awr:
+  intent: plan.execute
+---
+
+# No
+"""
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

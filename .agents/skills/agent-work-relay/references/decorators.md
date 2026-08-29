@@ -95,3 +95,6 @@ Client content cannot override those fields.
 - Require an exact plan and approval binding before execution.
 - Require response fingerprints to match the accepted input and artifact bytes.
 - Record normalization or compatibility translation in the receipt ledger.
+- Response packets are `authority: report_only`. They never grant execution,
+  merge, deployment, or destructive authority. Large logs, diffs, reports, and
+  visual evidence must be artifact references.

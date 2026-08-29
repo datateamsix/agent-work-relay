@@ -15,6 +15,11 @@ TOOL_SCOPES = {
     "refresh_planning": "awr:refresh",
     "get_plan": "awr:read",
     "get_work_order_timeline": "awr:read",
+    "begin_artifact_intake": "awr:plan",
+    "finalize_artifact_upload": "awr:plan",
+    "get_artifact_status": "awr:read",
+    "submit_work_bundle_for_planning": "awr:plan",
+    "get_work_order_artifacts": "awr:read",
 }
 
 
@@ -68,6 +73,10 @@ class Settings:
     security_scanner: SecurityScannerKind = "clamav"
     artifact_declare_ttl_seconds: int = 86400
     artifact_clean_ttl_seconds: int = 604800
+    bundle_markdown_max_bytes: int = 256 * 1024
+    bundle_max_artifacts: int = 10
+    bundle_max_bytes: int = 25 * 1024 * 1024
+    upload_ticket_ttl_seconds: int = 900
 
     extra_jwks: dict[str, object] = field(default_factory=dict, compare=False)
 
@@ -172,6 +181,10 @@ class Settings:
             security_scanner=scanner,  # type: ignore[arg-type]
             artifact_declare_ttl_seconds=_int_env("AWR_ARTIFACT_DECLARE_TTL", 86400),
             artifact_clean_ttl_seconds=_int_env("AWR_ARTIFACT_CLEAN_TTL", 604800),
+            bundle_markdown_max_bytes=_int_env("AWR_BUNDLE_MARKDOWN_MAX_BYTES", 256 * 1024),
+            bundle_max_artifacts=_int_env("AWR_BUNDLE_MAX_ARTIFACTS", 10),
+            bundle_max_bytes=_int_env("AWR_BUNDLE_MAX_BYTES", 25 * 1024 * 1024),
+            upload_ticket_ttl_seconds=_int_env("AWR_UPLOAD_TICKET_TTL", 900),
         )
         settings.validate()
         return settings

@@ -161,15 +161,30 @@ lifecycle templates are in
 Keep the project-level skill in destination repositories so remote coding agents
 can discover the same relay protocol used by planning and review agents.
 
-## MCP tool
+## MCP tools
 
-The MCP server exposes four tools:
+Planning work orders still use `submit_prompt_for_planning` (512 KiB Markdown,
+three ledger events). Canonical planning documents may begin with `@input` and
+YAML frontmatter (`intent` or `message_type` = `feature.plan` /
+`refinement.plan`). `@awr feature.plan` remains a compatibility alias.
 
-- `submit_prompt_for_planning` validates, fingerprints, stores, and dispatches
-  the work order;
-- `refresh_planning` reads Cursor run state and captures a terminal plan;
-- `get_plan` returns the immutable, fingerprinted `PlanPacket`;
-- `get_work_order_timeline` returns the complete ordered receipt ledger.
+Supporting files use a separate authenticated upload path. MCP never accepts
+file bytes or remote URLs:
+
+1. `begin_artifact_intake` declares metadata and returns a one-time upload
+   ticket plus `PUT /v1/artifacts/{id}/content`.
+2. The client streams the raw body with bearer auth and `X-AWR-Upload-Token`.
+3. `finalize_artifact_upload` runs the security gate.
+4. `submit_work_bundle_for_planning` attaches only `CLEAN` artifact IDs.
+5. `get_artifact_status` and `get_work_order_artifacts` return metadata and
+   references, never bytes or paths.
+
+Bundle limits are 256 KiB Markdown, 10 MiB per artifact, 25 MiB total, and ten
+artifacts. Executors receive a reference manifest marked `not_delivered`.
+
+`awr.response/v1` schemas, canonical fingerprints, `@response` Markdown, and
+cache-key / ETag contracts exist in this slice. `submit_response` is not
+exposed; responses never grant execution, merge, or deployment authority.
 
 `submit_prompt_for_planning` accepts:
 
@@ -189,13 +204,14 @@ status, duplicate flag, and current ledger sequence.
 ```text
 src/awr/
   contracts.py          typed work orders, receipts, and ledger entries
-  decorators.py         strict @awr command grammar
+  decorators.py         @input frontmatter and @awr compatibility alias
   service.py            deterministic orchestration
   wrappers.py           versioned executor envelopes
+  responses/            awr.response/v1 contracts, render, cache keys
   settings.py           runtime profile and OAuth resource settings
   auth/                 OAuth 2.1 resource-server verification
   executors/            provider-neutral executor port and Cursor seam
-  artifacts/            quarantine intake, security pipeline, retention
+  artifacts/            quarantine, security gate, tickets, work bundles
   storage/              SQLite, Firestore, local artifact body store
   transports/           stdio MCP, Streamable HTTP ASGI, optional REST
 tests/
@@ -233,7 +249,9 @@ generations. Optional validators live in the `security` extra:
 uv sync --extra hosted --extra security --extra dev
 ```
 
-This slice does not upload artifacts or attach them to Cursor runs.
+AWR-AS-03 lets planners upload allowlisted supporting files into quarantine,
+inspect them, and reference CLEAN IDs from a work bundle. Artifact bodies are
+not delivered to Cursor in this slice. GCS delivery is AWR-AS-04.
 
 ## Safety posture
 

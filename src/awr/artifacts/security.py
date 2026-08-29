@@ -4,6 +4,8 @@ import hashlib
 from dataclasses import dataclass
 from uuid import uuid4
 
+from ..responses.cache import security_receipt_cache_key
+from ..responses.contracts import POLICY_VERSION
 from .clock import Clock, UtcClock
 from .contracts import (
     REASON_EXTENSION_MISMATCH,
@@ -93,7 +95,11 @@ class ArtifactSecurityService:
                 f"Artifact {artifact_id} is already being scanned by another worker."
             )
 
-        if claim.already_scanned and claim.existing_receipt is not None:
+        if (
+            claim.already_scanned
+            and claim.existing_receipt is not None
+            and self._receipt_reusable(claim.existing_receipt)
+        ):
             return self._finish_from_receipt(
                 claim.artifact_id, claim.lease_id, claim.existing_receipt
             )
@@ -124,6 +130,12 @@ class ArtifactSecurityService:
             )
         completed_at = self.clock.now().isoformat()
         diagnostics = decision_status_diagnostics(decision.status, decision.diagnostics)
+        diagnostics["receipt_cache_key"] = security_receipt_cache_key(
+            sha256=claim.generation_sha256,
+            scanner_id=decision.scan.engine,
+            scanner_version=decision.scan.engine_version,
+            signature_version=decision.scan.signature_version,
+        )
         receipt = ArtifactSecurityReceipt(
             receipt_id=f"scr-{uuid4()}",
             artifact_id=artifact_id,
@@ -160,12 +172,26 @@ class ArtifactSecurityService:
                 receipt = self.metadata.get_security_receipt_for_digest(
                     artifact.artifact_id, artifact.sha256
                 )
-                if receipt is not None:
+                if receipt is not None and self._receipt_reusable(receipt):
                     return receipt
             receipts = self.metadata.list_security_receipts(artifact.artifact_id)
-            if receipts:
-                return receipts[-1]
+            reusable = [item for item in receipts if self._receipt_reusable(item)]
+            if reusable:
+                return reusable[-1]
         return None
+
+    @staticmethod
+    def _receipt_reusable(receipt: ArtifactSecurityReceipt) -> bool:
+        expected = security_receipt_cache_key(
+            sha256=receipt.scanned_sha256,
+            scanner_id=receipt.scanner_id,
+            scanner_version=receipt.scanner_version,
+            signature_version=receipt.signature_version,
+        )
+        stored = receipt.diagnostics.get("receipt_cache_key")
+        if stored is None:
+            return True
+        return stored == expected if isinstance(stored, str) else False
 
     def _ensure_clean_body(self, receipt: ArtifactSecurityReceipt) -> ArtifactSecurityReceipt:
         status = status_from_security_receipt(receipt)
@@ -386,6 +412,7 @@ def _diagnostics(
         "engine_version": scan.engine_version,
         "signature_version": scan.signature_version,
         "scan_outcome": scan.outcome.value,
+        "policy_version": POLICY_VERSION,
         **control_authority_diagnostics(payload_bytes),
     }
     if scan.signature:

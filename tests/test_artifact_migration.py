@@ -162,10 +162,24 @@ class ArtifactMigrationTests(unittest.TestCase):
                     "SELECT name FROM sqlite_master WHERE type='index'"
                 ).fetchall()
             }
+            tables = {
+                str(row[0])
+                for row in connection.execute(
+                    "SELECT name FROM sqlite_master WHERE type='table'"
+                ).fetchall()
+            }
+            work_columns = {
+                str(row[1])
+                for row in connection.execute("PRAGMA table_info(work_orders)").fetchall()
+            }
         self.assertIn("scan_lease_id", columns)
         self.assertIn("scan_attempt", columns)
         self.assertIn("idx_artifact_receipts_scan_started", indexes)
         self.assertIn("idx_artifact_security_receipts_digest", indexes)
+        self.assertIn("artifact_upload_tickets", tables)
+        self.assertIn("bundle_sha256", work_columns)
+        self.assertIn("idx_ledger_unique_bundle_validated", indexes)
+        self.assertIn("idx_artifact_receipts_relay_authorized", indexes)
 
 
 if __name__ == "__main__":

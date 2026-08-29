@@ -42,9 +42,27 @@ Supporting artifacts are pre-work-order objects. Their metadata lives in SQLite
 `artifacts` rows. Binary bodies are stored outside SQLite under
 `AWR_ARTIFACT_ROOT` in separate `quarantine/` and `clean/` trees. Artifact
 receipts use `artifact_receipts`, not the work-order `ledger`, because artifacts
-exist before a work-order ID. `work_order_id` on artifact receipts stays NULL
-until a later bundle slice correlates them. Bodies are never written to
-Firestore, SQLite BLOBs, or ledger JSON.
+exist before a work-order ID. Bundle attach writes `artifact.relay_authorized`
+with `work_order_id` set; earlier intake and scan receipts stay NULL and are
+never rewritten. Bodies are never written to Firestore, SQLite BLOBs, or
+ledger JSON.
+
+A work bundle is one primary decorated Markdown document plus zero to ten
+immutable `ArtifactReference`s. Bytes move on authenticated HTTPS
+`PUT /v1/artifacts/{id}/content` with a one-time upload ticket. MCP tools
+operate on IDs only: no file bytes, no remote URL fetch, and no ZIP transport.
+The markdown-only `submit_prompt_for_planning` path is unchanged (three ledger
+events). The bundle path records `work_order.accepted` → `bundle.validated` →
+`work_order.routed` → `executor.acknowledged`. Executors receive a manifest of
+references marked `not_delivered`; they never receive artifact bodies in this
+slice.
+
+`awr.response/v1` is defined in this slice with strict discriminator schemas
+for planning and later execution/review packets. Responses are report-only:
+they never grant execution, merge, deployment, or destructive authority.
+Large logs, diffs, reports, and visual evidence are artifact references, not
+inline packet fields. `submit_response` and execution/review state transitions
+are not operational until AWR-LC-01.
 
 `ArtifactSecurityService.inspect` is the only path that may move an artifact
 from `QUARANTINED` to `SCANNING` or `CLEAN`. Intake (`ArtifactService`) writes

@@ -1,3 +1,4 @@
+from .bundle import BundleValidationError
 from .contracts import (
     Artifact,
     ArtifactPurpose,
@@ -6,7 +7,9 @@ from .contracts import (
     ArtifactSecurityReceipt,
     ArtifactSecurityVerdict,
     ArtifactStatus,
+    ArtifactUploadTicket,
     ScanClaim,
+    WorkBundle,
     status_from_security_receipt,
 )
 from .errors import (
@@ -14,8 +17,10 @@ from .errors import (
     ArtifactConflictError,
     ArtifactError,
     ArtifactImmutabilityError,
+    ArtifactTicketError,
     ArtifactTooLargeError,
 )
+from .relay import ArtifactRelay
 from .security import ArtifactSecurityService
 from .service import ArtifactService
 
@@ -28,12 +33,17 @@ __all__ = [
     "ArtifactPurpose",
     "ArtifactReceipt",
     "ArtifactReference",
+    "ArtifactRelay",
     "ArtifactSecurityReceipt",
     "ArtifactSecurityService",
     "ArtifactSecurityVerdict",
     "ArtifactService",
     "ArtifactStatus",
+    "ArtifactTicketError",
     "ArtifactTooLargeError",
+    "ArtifactUploadTicket",
+    "BundleValidationError",
     "ScanClaim",
+    "WorkBundle",
     "status_from_security_receipt",
 ]

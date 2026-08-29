@@ -97,10 +97,15 @@ class HostedHttpTests(unittest.TestCase):
         self.assertEqual(
             names,
             [
+                "begin_artifact_intake",
+                "finalize_artifact_upload",
+                "get_artifact_status",
                 "get_plan",
+                "get_work_order_artifacts",
                 "get_work_order_timeline",
                 "refresh_planning",
                 "submit_prompt_for_planning",
+                "submit_work_bundle_for_planning",
             ],
         )
         submit = self._rpc(
@@ -255,6 +260,59 @@ class JwtHttpTests(unittest.TestCase):
         self.assertEqual(response.json()["error"], "insufficient_scope")
         self.assertIn("insufficient_scope", response.headers["www-authenticate"])
         self.assertIn("awr:plan", response.headers["www-authenticate"])
+
+
+@unittest.skipUnless(TestClient is not None, "hosted extra is required")
+class HttpCacheTests(unittest.TestCase):
+    def setUp(self) -> None:
+        store = FirestoreStateStore(InMemoryFirestore())
+        service = build_service(store=store, executor=RecordingCursorExecutor())
+        app = create_app(settings=_settings(), service=service)
+        self._context = TestClient(app)
+        self.client = self._context.__enter__()
+
+    def tearDown(self) -> None:
+        self._context.__exit__(None, None, None)
+
+    def test_plan_read_uses_etag_and_mutations_are_no_store(self) -> None:
+        created = self.client.post(
+            "/v1/planning",
+            json={
+                "markdown": PROMPT,
+                "sender": "chatgpt:product-planner",
+                "recipient": "cursor:recording",
+                "repository_url": "https://github.com/example/project",
+                "idempotency_key": "etag-plan",
+            },
+            headers=_auth_header(),
+        )
+        self.assertEqual(created.status_code, 200)
+        self.assertEqual(created.headers["cache-control"], "no-store")
+        work_order_id = created.json()["work_order_id"]
+
+        refreshed = self.client.post(
+            f"/v1/planning/{work_order_id}/refresh",
+            headers=_auth_header(),
+        )
+        self.assertEqual(refreshed.status_code, 200)
+        self.assertEqual(refreshed.headers["cache-control"], "no-store")
+
+        first = self.client.get(
+            f"/v1/planning/{work_order_id}/plan",
+            headers=_auth_header(),
+        )
+        self.assertEqual(first.status_code, 200)
+        self.assertEqual(first.headers["cache-control"], "private, no-cache")
+        etag = first.headers["etag"]
+        self.assertTrue(etag.startswith('"sha256:'))
+
+        cached = self.client.get(
+            f"/v1/planning/{work_order_id}/plan",
+            headers={**_auth_header(), "If-None-Match": etag},
+        )
+        self.assertEqual(cached.status_code, 304)
+        self.assertEqual(cached.headers["etag"], etag)
+        self.assertEqual(cached.headers["cache-control"], "private, no-cache")
 
 
 if __name__ == "__main__":

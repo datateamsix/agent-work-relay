@@ -94,16 +94,19 @@ class FirestoreStateStore:
                     "idempotency_key": work_order.idempotency_key,
                 },
             )
+            accepted_payload = {
+                "content_sha256": work_order.content_sha256,
+                "wrapper": f"{work_order.wrapper_id}@{work_order.wrapper_version}",
+            }
+            if work_order.bundle_sha256 is not None:
+                accepted_payload["bundle_sha256"] = work_order.bundle_sha256
             entry = _new_ledger_entry(
                 sequence=1,
                 work_order_id=work_order.work_order_id,
                 event_type="work_order.accepted",
                 actor=work_order.sender,
                 counterparty="broker:awr",
-                payload={
-                    "content_sha256": work_order.content_sha256,
-                    "wrapper": f"{work_order.wrapper_id}@{work_order.wrapper_version}",
-                },
+                payload=accepted_payload,
             )
             transaction.set(
                 self._ledger_collection(work_order.work_order_id).document(entry.event_id),
@@ -340,6 +343,7 @@ def _work_order_to_doc(work_order: WorkOrder) -> dict[str, Any]:
         "wrapper_sha256": work_order.wrapper_sha256,
         "status": work_order.status.value,
         "created_at": work_order.created_at,
+        "bundle_sha256": work_order.bundle_sha256,
     }
 
 
@@ -363,6 +367,7 @@ def _doc_to_work_order(data: dict[str, Any] | None) -> WorkOrder:
         wrapper_sha256=str(data["wrapper_sha256"]),
         status=WorkStatus(str(data["status"])),
         created_at=str(data["created_at"]),
+        bundle_sha256=str(data["bundle_sha256"]) if data.get("bundle_sha256") else None,
     )
 
 

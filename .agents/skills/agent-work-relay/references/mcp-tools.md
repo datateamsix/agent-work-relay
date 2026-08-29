@@ -67,9 +67,20 @@ Server v0.1 planning tools map as follows:
 | Existing tool | Generalized equivalent |
 |---|---|
 | `submit_prompt_for_planning` | `submit_input` with feature/refinement plan |
+| `submit_work_bundle_for_planning` | `submit_input` plus artifact references |
+| `begin_artifact_intake` | artifact declaration + upload ticket |
+| `finalize_artifact_upload` | security-gate inspect |
+| `get_artifact_status` | artifact metadata read |
+| `get_work_order_artifacts` | immutable reference list |
 | `refresh_planning` | `refresh_external_run` |
 | `get_plan` | `get_work_order` result selection |
 | `get_work_order_timeline` | unchanged |
 
-Do not expose response or execution templates as operationally supported until
-the corresponding tools, state transitions, scopes, and conformance tests exist.
+Supporting binaries use authenticated `PUT /v1/artifacts/{id}/content` with
+`X-AWR-Upload-Token`. Do not place file bytes, base64 payloads, or remote URLs
+in MCP tool arguments.
+
+`awr.response/v1` packet schemas and `@response` Markdown rendering are defined
+for later slices. Do not call `submit_response` and do not treat execution or
+review templates as operational until AWR-LC-01 adds those tools, scopes, and
+state transitions.

@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
+from .artifacts.relay import ArtifactRelay
 from .artifacts.scan import SecurityScanner, build_scanner
 from .artifacts.security import ArtifactSecurityService
 from .artifacts.service import ArtifactService
@@ -31,6 +32,49 @@ def build_service(
         executor=selected_executor,
         default_repository_url=os.getenv("AWR_REPOSITORY_URL") or None,
         default_base_ref=os.getenv("AWR_BASE_REF", "main"),
+        artifacts=build_artifact_relay(db_path=db_path),
+    )
+
+
+def build_artifact_relay(
+    db_path: str | Path | None = None,
+    artifact_root: str | Path | None = None,
+    max_bytes: int | None = None,
+    scanner: SecurityScanner | None = None,
+) -> ArtifactRelay:
+    sqlite_path = Path(
+        db_path if db_path is not None else os.getenv("AWR_SQLITE_PATH", ".awr/awr.db")
+    )
+    root = Path(
+        artifact_root
+        if artifact_root is not None
+        else os.getenv("AWR_ARTIFACT_ROOT", ".awr/artifacts")
+    )
+    limit = max_bytes
+    if limit is None:
+        raw = os.getenv("AWR_ARTIFACT_MAX_BYTES")
+        limit = int(raw) if raw else 10 * 1024 * 1024
+    timeout = int(os.getenv("AWR_SCANNER_TIMEOUT_SECONDS", "15"))
+    lease_ttl = int(os.getenv("AWR_SCAN_LEASE_TTL_SECONDS", str(timeout + 15)))
+    ticket_ttl = int(os.getenv("AWR_UPLOAD_TICKET_TTL", "900"))
+    kind = os.getenv("AWR_SECURITY_SCANNER", "clamav") or "clamav"
+    metadata = SQLiteArtifactMetadataStore(sqlite_path)
+    bodies = LocalArtifactBodyStore(root)
+    intake = ArtifactService(metadata, QuarantineOnlyBodyStore(bodies), max_bytes=limit)
+    security = ArtifactSecurityService(
+        metadata,
+        bodies,
+        scanner if scanner is not None else build_scanner(kind, timeout),
+        max_bytes=limit,
+        lease_ttl_seconds=lease_ttl,
+    )
+    return ArtifactRelay(
+        intake,
+        security,
+        metadata,
+        bodies,
+        ticket_ttl_seconds=ticket_ttl,
+        public_base_url=os.getenv("AWR_PUBLIC_BASE_URL", "") or "",
     )
 
 

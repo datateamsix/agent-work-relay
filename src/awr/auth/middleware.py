@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import json
+import logging
 
 from starlette.datastructures import Headers
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from ..observability import log_event
 from ..settings import TOOL_SCOPES, Settings
+from .context import reset_current_principal, set_current_principal
 from .tokens import AuthError, Principal, TokenVerifier, require_scope
 
 PUBLIC_PATHS = {
@@ -18,6 +20,8 @@ PUBLIC_PATHS = {
 
 REST_SCOPES = {
     ("POST", "/v1/planning"): "awr:plan",
+    ("POST", "/v1/artifacts"): "awr:plan",
+    ("POST", "/v1/work-bundles"): "awr:plan",
 }
 
 
@@ -41,6 +45,21 @@ class OAuthResourceMiddleware:
 
         headers = Headers(scope=scope)
         authorization = headers.get("authorization")
+        if _is_artifact_upload(method, path):
+            try:
+                principal = self._authenticate(authorization)
+                require_scope(principal, "awr:plan")
+            except AuthError as exc:
+                await _send_auth_error(send, self.settings, exc)
+                return
+            token = set_current_principal(principal)
+            scope["awr_principal"] = principal
+            try:
+                await self.app(scope, receive, send)
+            finally:
+                reset_current_principal(token)
+            return
+
         body, replay = await _buffer_body(receive)
         try:
             principal = self._authenticate(authorization)
@@ -50,8 +69,12 @@ class OAuthResourceMiddleware:
             await _send_auth_error(send, self.settings, exc)
             return
 
+        token = set_current_principal(principal)
         scope["awr_principal"] = principal
-        await self.app(scope, replay, send)
+        try:
+            await self.app(scope, replay, send)
+        finally:
+            reset_current_principal(token)
 
     def _authenticate(self, authorization: str | None) -> Principal:
         if not authorization:
@@ -74,6 +97,14 @@ class OAuthResourceMiddleware:
             return "awr:refresh"
         if method.upper() == "GET" and path.startswith("/v1/planning/"):
             return "awr:read"
+        if method.upper() == "GET" and path.startswith("/v1/artifacts/"):
+            return "awr:read"
+        if (
+            method.upper() == "POST"
+            and path.startswith("/v1/artifacts/")
+            and path.endswith("/finalize")
+        ):
+            return "awr:plan"
         if path != "/mcp":
             return None
         if method.upper() != "POST" or not body:
@@ -91,6 +122,12 @@ class OAuthResourceMiddleware:
         if not isinstance(name, str):
             return None
         return TOOL_SCOPES.get(name, "awr:read")
+
+
+def _is_artifact_upload(method: str, path: str) -> bool:
+    return (
+        method.upper() == "PUT" and path.startswith("/v1/artifacts/") and path.endswith("/content")
+    )
 
 
 async def _buffer_body(receive: Receive) -> tuple[bytes, Receive]:
@@ -131,7 +168,7 @@ async def _send_auth_error(send: Send, settings: Settings, error: AuthError) -> 
         "utf-8"
     )
     log_event(
-        __import__("logging").getLogger("awr"),
+        logging.getLogger("awr"),
         "auth.challenge",
         status=error.status_code,
         error=error.error,

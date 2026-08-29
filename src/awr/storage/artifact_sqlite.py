@@ -15,6 +15,7 @@ from ..artifacts.contracts import (
     ArtifactSecurityReceipt,
     ArtifactSecurityVerdict,
     ArtifactStatus,
+    ArtifactUploadTicket,
     ScanClaim,
     allowed_transitions,
     is_orchestrator_status,
@@ -407,6 +408,68 @@ class SQLiteArtifactMetadataStore:
             ).fetchall()
             return [self._row_to_receipt(row) for row in rows]
 
+    def put_upload_ticket(self, ticket: ArtifactUploadTicket) -> ArtifactUploadTicket:
+        with self._connection() as connection:
+            connection.execute(
+                """
+                INSERT INTO artifact_upload_tickets (
+                    ticket_id, artifact_id, owner, token_hash, expires_at, spent_at, max_bytes
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(artifact_id) DO UPDATE SET
+                    ticket_id = excluded.ticket_id,
+                    owner = excluded.owner,
+                    token_hash = excluded.token_hash,
+                    expires_at = excluded.expires_at,
+                    spent_at = excluded.spent_at,
+                    max_bytes = excluded.max_bytes
+                """,
+                (
+                    ticket.ticket_id,
+                    ticket.artifact_id,
+                    ticket.owner,
+                    ticket.token_hash,
+                    ticket.expires_at,
+                    ticket.spent_at,
+                    ticket.max_bytes,
+                ),
+            )
+            return ticket
+
+    def get_upload_ticket(self, artifact_id: str) -> ArtifactUploadTicket | None:
+        with self._connection() as connection:
+            row = connection.execute(
+                "SELECT * FROM artifact_upload_tickets WHERE artifact_id = ?",
+                (artifact_id,),
+            ).fetchone()
+            return None if row is None else self._row_to_ticket(row)
+
+    def spend_upload_ticket(self, artifact_id: str, *, now: datetime) -> ArtifactUploadTicket:
+        with self._connection() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            row = connection.execute(
+                "SELECT * FROM artifact_upload_tickets WHERE artifact_id = ?",
+                (artifact_id,),
+            ).fetchone()
+            if row is None:
+                raise ArtifactError("Upload ticket is missing.")
+            ticket = self._row_to_ticket(row)
+            if ticket.spent_at is not None:
+                return ticket
+            connection.execute(
+                """
+                UPDATE artifact_upload_tickets
+                SET spent_at = ?
+                WHERE artifact_id = ?
+                """,
+                (now.isoformat(), artifact_id),
+            )
+            updated = connection.execute(
+                "SELECT * FROM artifact_upload_tickets WHERE artifact_id = ?",
+                (artifact_id,),
+            ).fetchone()
+            assert updated is not None
+            return self._row_to_ticket(updated)
+
     @contextmanager
     def lock_artifact(self, artifact_id: str) -> Iterator[_SQLiteArtifactSession]:
         with self._connection() as connection:
@@ -480,14 +543,24 @@ class SQLiteArtifactMetadataStore:
                 ),
             )
         except sqlite3.IntegrityError:
-            existing = connection.execute(
-                """
-                SELECT * FROM artifact_receipts
-                WHERE artifact_id = ? AND event_type = ?
-                ORDER BY sequence
-                """,
-                (artifact_id, event_type),
-            ).fetchone()
+            if work_order_id is not None:
+                existing = connection.execute(
+                    """
+                    SELECT * FROM artifact_receipts
+                    WHERE artifact_id = ? AND event_type = ? AND work_order_id = ?
+                    ORDER BY sequence
+                    """,
+                    (artifact_id, event_type, work_order_id),
+                ).fetchone()
+            else:
+                existing = connection.execute(
+                    """
+                    SELECT * FROM artifact_receipts
+                    WHERE artifact_id = ? AND event_type = ?
+                    ORDER BY sequence
+                    """,
+                    (artifact_id, event_type),
+                ).fetchone()
             if existing is not None:
                 return self._row_to_receipt(existing)
             raise
@@ -577,6 +650,18 @@ class SQLiteArtifactMetadataStore:
             started_at=row["started_at"],
             completed_at=row["completed_at"],
             diagnostics=diagnostics if isinstance(diagnostics, dict) else {},
+        )
+
+    @staticmethod
+    def _row_to_ticket(row: sqlite3.Row) -> ArtifactUploadTicket:
+        return ArtifactUploadTicket(
+            ticket_id=row["ticket_id"],
+            artifact_id=row["artifact_id"],
+            owner=row["owner"],
+            token_hash=row["token_hash"],
+            expires_at=row["expires_at"],
+            spent_at=_optional_str(row, "spent_at"),
+            max_bytes=int(row["max_bytes"]),
         )
 
     def _security_receipt_on_connection(

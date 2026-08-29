@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import io
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import Any
@@ -10,12 +11,14 @@ from starlette.requests import Request
 from starlette.responses import HTMLResponse, JSONResponse, Response
 from starlette.routing import Mount, Route
 
+from ..artifacts.errors import ArtifactError, ArtifactTicketError
 from ..auth.middleware import OAuthResourceMiddleware
 from ..auth.tokens import TokenVerifier
 from ..factory import build_service
 from ..observability import configure_logging, log_event
 from ..service import BrokerService, WorkOrderValidationError
 from ..settings import Settings
+from .http_cache import cached_json, no_store_json
 from .mcp_server import create_server
 
 _HOME_HTML = """<!DOCTYPE html>
@@ -102,32 +105,113 @@ def create_app(
                 idempotency_key=payload.get("idempotency_key"),
             )
         except (WorkOrderValidationError, KeyError, TypeError, ValueError) as exc:
-            return JSONResponse({"error": str(exc)}, status_code=400)
-        return JSONResponse(receipt.to_dict())
+            return no_store_json({"error": str(exc)}, status_code=400)
+        return no_store_json(receipt.to_dict())
 
     async def refresh_planning(request: Request) -> Response:
         work_order_id = request.path_params["work_order_id"]
         try:
             result = broker.refresh_planning(work_order_id)
         except WorkOrderValidationError as exc:
-            return JSONResponse({"error": str(exc)}, status_code=400)
-        return JSONResponse(result.to_dict())
+            return no_store_json({"error": str(exc)}, status_code=400)
+        return no_store_json(result.to_dict())
 
     async def get_plan(request: Request) -> Response:
         work_order_id = request.path_params["work_order_id"]
         try:
             result = broker.get_plan(work_order_id)
         except WorkOrderValidationError as exc:
-            return JSONResponse({"error": str(exc)}, status_code=400)
-        return JSONResponse(result.to_dict())
+            return no_store_json({"error": str(exc)}, status_code=400)
+        return cached_json(request, result.to_dict())
 
     async def get_timeline(request: Request) -> Response:
         work_order_id = request.path_params["work_order_id"]
         try:
             result = broker.get_work_order_timeline(work_order_id)
         except WorkOrderValidationError as exc:
-            return JSONResponse({"error": str(exc)}, status_code=400)
-        return JSONResponse(result)
+            return no_store_json({"error": str(exc)}, status_code=400)
+        return cached_json(request, result)
+
+    async def begin_artifact(request: Request) -> Response:
+        payload = await request.json()
+        try:
+            result = broker.begin_artifact_intake(
+                owner=payload.get("sender") or payload.get("owner"),
+                original_filename=str(payload["original_filename"]),
+                declared_media_type=str(payload["declared_media_type"]),
+                purpose=str(payload["purpose"]),
+                idempotency_key=str(payload["idempotency_key"]),
+                expected_byte_length=payload.get("expected_byte_length"),
+                expected_sha256=payload.get("expected_sha256"),
+            )
+        except (WorkOrderValidationError, ArtifactError, KeyError, TypeError, ValueError) as exc:
+            return no_store_json({"error": str(exc)}, status_code=400)
+        return no_store_json(result)
+
+    async def upload_artifact(request: Request) -> Response:
+        artifact_id = request.path_params["artifact_id"]
+        token = request.headers.get("x-awr-upload-token")
+        if not token:
+            return no_store_json({"error": "Upload token required."}, status_code=400)
+        body = await request.body()
+        try:
+            result = broker.upload_artifact_content(artifact_id, io.BytesIO(body), token=token)
+        except ArtifactTicketError as exc:
+            status = 409 if "spent" in str(exc).lower() else 403
+            if "expired" in str(exc).lower():
+                status = 410
+            if "missing" in str(exc).lower():
+                status = 404
+            return no_store_json({"error": str(exc)}, status_code=status)
+        except (ArtifactError, WorkOrderValidationError, KeyError) as exc:
+            return no_store_json({"error": str(exc)}, status_code=400)
+        return no_store_json(result)
+
+    async def finalize_artifact(request: Request) -> Response:
+        artifact_id = request.path_params["artifact_id"]
+        try:
+            result = broker.finalize_artifact_upload(artifact_id)
+        except KeyError as exc:
+            return no_store_json({"error": str(exc)}, status_code=404)
+        except (ArtifactError, WorkOrderValidationError) as exc:
+            return no_store_json({"error": str(exc)}, status_code=400)
+        return no_store_json(result)
+
+    async def artifact_status(request: Request) -> Response:
+        artifact_id = request.path_params["artifact_id"]
+        try:
+            result = broker.get_artifact_status(artifact_id)
+        except KeyError as exc:
+            return no_store_json({"error": str(exc)}, status_code=404)
+        except WorkOrderValidationError as exc:
+            return no_store_json({"error": str(exc)}, status_code=400)
+        return cached_json(request, result)
+
+    async def submit_bundle(request: Request) -> Response:
+        payload = await request.json()
+        try:
+            receipt = broker.submit_work_bundle_for_planning(
+                markdown=str(payload["markdown"]),
+                sender=payload.get("sender"),
+                recipient=str(payload["recipient"]),
+                repository_url=(
+                    str(payload["repository_url"]) if payload.get("repository_url") else None
+                ),
+                base_ref=str(payload["base_ref"]) if payload.get("base_ref") else None,
+                idempotency_key=payload.get("idempotency_key"),
+                artifact_ids=payload.get("artifact_ids") or [],
+            )
+        except (WorkOrderValidationError, KeyError, TypeError, ValueError) as exc:
+            return no_store_json({"error": str(exc)}, status_code=400)
+        return no_store_json(receipt.to_dict())
+
+    async def work_order_artifacts(request: Request) -> Response:
+        work_order_id = request.path_params["work_order_id"]
+        try:
+            result = broker.get_work_order_artifacts(work_order_id)
+        except WorkOrderValidationError as exc:
+            return no_store_json({"error": str(exc)}, status_code=400)
+        return cached_json(request, result)
 
     return Starlette(
         routes=[
@@ -139,6 +223,16 @@ def create_app(
             Route("/v1/planning/{work_order_id}/refresh", refresh_planning, methods=["POST"]),
             Route("/v1/planning/{work_order_id}/plan", get_plan, methods=["GET"]),
             Route("/v1/planning/{work_order_id}/timeline", get_timeline, methods=["GET"]),
+            Route(
+                "/v1/planning/{work_order_id}/artifacts",
+                work_order_artifacts,
+                methods=["GET"],
+            ),
+            Route("/v1/artifacts", begin_artifact, methods=["POST"]),
+            Route("/v1/artifacts/{artifact_id}/content", upload_artifact, methods=["PUT"]),
+            Route("/v1/artifacts/{artifact_id}/finalize", finalize_artifact, methods=["POST"]),
+            Route("/v1/artifacts/{artifact_id}", artifact_status, methods=["GET"]),
+            Route("/v1/work-bundles", submit_bundle, methods=["POST"]),
             Mount("/", mcp_app),
         ],
         middleware=[

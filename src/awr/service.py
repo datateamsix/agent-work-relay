@@ -2,10 +2,19 @@ from __future__ import annotations
 
 import hashlib
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, BinaryIO
 from urllib.parse import urlparse
 from uuid import uuid4
 
+from .artifacts.bundle import (
+    BundleValidationError,
+    reference_payloads,
+    resolve_bundle,
+    verify_bundle_generation,
+)
+from .artifacts.contracts import WorkBundle
+from .artifacts.relay import ArtifactRelay
+from .auth.context import resolve_actor
 from .contracts import (
     ExecutorRunStatus,
     LedgerEntry,
@@ -18,6 +27,7 @@ from .contracts import (
 )
 from .decorators import parse_directive
 from .executors.base import PlanningExecutor
+from .responses.cache import replay_cache_key
 from .storage.base import StateStore, WorkOrderSession
 from .wrappers import WrappedPrompt, wrap_prompt
 
@@ -36,11 +46,13 @@ class BrokerService:
         *,
         default_repository_url: str | None = None,
         default_base_ref: str = "main",
+        artifacts: ArtifactRelay | None = None,
     ) -> None:
         self.store = store
         self.executor = executor
         self.default_repository_url = default_repository_url
         self.default_base_ref = default_base_ref
+        self.artifacts = artifacts
 
     def submit_prompt_for_planning(
         self,
@@ -69,6 +81,7 @@ class BrokerService:
             repository_url=resolved_repository_url,
             base_ref=resolved_base_ref,
             content_sha256=content_sha256,
+            bundle_sha256="",
         )
         work_order_id = f"AWR-{uuid4()}"
         wrapped = wrap_prompt(directive, markdown, work_order_id)
@@ -104,10 +117,164 @@ class BrokerService:
                     duplicate=True,
                     executor_run_id=str(acknowledged.payload["executor_run_id"]),
                     ledger_sequence=ledger_sequence,
+                    bundle_sha256=work_order.bundle_sha256,
                 )
             wrapped = wrap_prompt(directive, markdown, work_order.work_order_id)
 
         return self._route_and_dispatch(work_order=work_order, wrapped=wrapped, parent=parent)
+
+    def begin_artifact_intake(
+        self,
+        *,
+        owner: str | None = None,
+        original_filename: str,
+        declared_media_type: str,
+        purpose: str,
+        idempotency_key: str,
+        expected_byte_length: int | None = None,
+        expected_sha256: str | None = None,
+    ) -> dict[str, Any]:
+        actor = self._actor(owner)
+        return self._require_artifacts().begin_intake(
+            owner=actor,
+            original_filename=original_filename,
+            declared_media_type=declared_media_type,
+            purpose=purpose,
+            idempotency_key=idempotency_key,
+            expected_byte_length=expected_byte_length,
+            expected_sha256=expected_sha256,
+        )
+
+    def upload_artifact_content(
+        self,
+        artifact_id: str,
+        stream: BinaryIO,
+        *,
+        actor: str | None = None,
+        token: str,
+    ) -> dict[str, Any]:
+        resolved = self._actor(actor)
+        artifact = self._require_artifacts().upload_content(
+            artifact_id, stream, actor=resolved, token=token
+        )
+        return {"artifact_id": artifact.artifact_id, "status": artifact.status.value}
+
+    def finalize_artifact_upload(
+        self, artifact_id: str, *, actor: str | None = None
+    ) -> dict[str, Any]:
+        return self._require_artifacts().finalize_upload(artifact_id, actor=self._actor(actor))
+
+    def get_artifact_status(self, artifact_id: str, *, actor: str | None = None) -> dict[str, Any]:
+        return self._require_artifacts().get_status(artifact_id, actor=self._actor(actor))
+
+    def submit_work_bundle_for_planning(
+        self,
+        *,
+        markdown: str,
+        sender: str | None = None,
+        recipient: str,
+        repository_url: str | None = None,
+        base_ref: str | None = None,
+        idempotency_key: str | None = None,
+        artifact_ids: list[str] | tuple[str, ...] | None = None,
+    ) -> SubmissionReceipt:
+        artifacts = self._require_artifacts()
+        actor = self._actor(sender)
+        try:
+            directive = parse_directive(markdown)
+            parent = self._resolve_parent(directive.parent_work_order_id)
+            resolved_repository_url, resolved_base_ref = self._resolve_repository(
+                repository_url=repository_url,
+                base_ref=base_ref,
+                parent=parent,
+            )
+            bundle = resolve_bundle(
+                markdown,
+                tuple(artifact_ids or ()),
+                sender=actor,
+                metadata=artifacts.metadata,
+                bodies=artifacts.bodies,
+            )
+        except BundleValidationError as exc:
+            raise WorkOrderValidationError(str(exc)) from exc
+        content_sha256 = hashlib.sha256(markdown.encode("utf-8")).hexdigest()
+        replay_key = idempotency_key or self._derive_idempotency_key(
+            sender=actor,
+            recipient=recipient,
+            directive=directive.name,
+            parent=directive.parent_work_order_id,
+            repository_url=resolved_repository_url,
+            base_ref=resolved_base_ref,
+            content_sha256=content_sha256,
+            bundle_sha256=bundle.bundle_sha256,
+        )
+        work_order_id = f"AWR-{uuid4()}"
+        wrapped = wrap_prompt(directive, markdown, work_order_id, bundle.references)
+        candidate = WorkOrder(
+            work_order_id=work_order_id,
+            idempotency_key=replay_key,
+            sender=actor,
+            recipient=recipient,
+            kind=directive.kind,
+            action=directive.action,
+            parent_work_order_id=directive.parent_work_order_id,
+            repository_url=resolved_repository_url,
+            base_ref=resolved_base_ref,
+            markdown=markdown,
+            content_sha256=content_sha256,
+            wrapper_id=wrapped.wrapper_id,
+            wrapper_version=wrapped.wrapper_version,
+            wrapper_sha256=wrapped.wrapper_sha256,
+            status=WorkStatus.ACCEPTED,
+            created_at=datetime.now(UTC).isoformat(),
+            bundle_sha256=bundle.bundle_sha256,
+        )
+        work_order, created, ledger_sequence = self.store.create_work_order(candidate)
+        if not created:
+            self._validate_replay(candidate, work_order)
+            acknowledged = self._latest_event(work_order.work_order_id, "executor.acknowledged")
+            if acknowledged is not None:
+                return SubmissionReceipt(
+                    receipt_type="work_order.accepted",
+                    work_order_id=work_order.work_order_id,
+                    content_sha256=work_order.content_sha256,
+                    status=work_order.status,
+                    duplicate=True,
+                    executor_run_id=str(acknowledged.payload["executor_run_id"]),
+                    ledger_sequence=ledger_sequence,
+                    bundle_sha256=work_order.bundle_sha256,
+                )
+            wrapped = wrap_prompt(directive, markdown, work_order.work_order_id, bundle.references)
+        self._record_bundle(work_order, bundle, actor)
+        try:
+            verify_bundle_generation(
+                bundle,
+                sender=actor,
+                metadata=artifacts.metadata,
+                bodies=artifacts.bodies,
+            )
+        except BundleValidationError as exc:
+            with self.store.lock_work_order(work_order.work_order_id) as session:
+                if self._latest_from(session.list_ledger(), "work_order.routed") is None:
+                    session.update_status(WorkStatus.FAILED)
+                    session.append_ledger(
+                        event_type="bundle.rejected",
+                        actor="broker:awr",
+                        counterparty=actor,
+                        payload={"reason": str(exc), "bundle_sha256": bundle.bundle_sha256},
+                    )
+            raise WorkOrderValidationError(str(exc)) from exc
+        return self._route_and_dispatch(work_order=work_order, wrapped=wrapped, parent=parent)
+
+    def get_work_order_artifacts(self, work_order_id: str) -> list[dict[str, Any]]:
+        self._require_work_order(work_order_id)
+        validated = self._latest_event(work_order_id, "bundle.validated")
+        if validated is None:
+            return []
+        raw = validated.payload.get("references")
+        if not isinstance(raw, list):
+            return []
+        return [item for item in raw if isinstance(item, dict)]
 
     def refresh_planning(self, work_order_id: str) -> PlanningStatusReceipt | PlanPacket:
         work_order = self._require_work_order(work_order_id)
@@ -230,6 +397,51 @@ class BrokerService:
         self._require_work_order(work_order_id)
         return [entry.to_dict() for entry in self.store.list_ledger(work_order_id)]
 
+    def _require_artifacts(self) -> ArtifactRelay:
+        if self.artifacts is None:
+            raise WorkOrderValidationError("Artifact intake is not configured.")
+        return self.artifacts
+
+    @staticmethod
+    def _actor(explicit: str | None) -> str:
+        try:
+            return resolve_actor(explicit)
+        except ValueError as exc:
+            raise WorkOrderValidationError(str(exc)) from exc
+
+    def _record_bundle(self, work_order: WorkOrder, bundle: WorkBundle, actor: str) -> None:
+        artifacts = self._require_artifacts()
+        with self.store.lock_work_order(work_order.work_order_id) as session:
+            if self._latest_from(session.list_ledger(), "bundle.validated") is None:
+                session.append_ledger(
+                    event_type="bundle.validated",
+                    actor="broker:awr",
+                    counterparty=actor,
+                    payload={
+                        "bundle_sha256": bundle.bundle_sha256,
+                        "references": reference_payloads(bundle),
+                    },
+                )
+        for reference in bundle.references:
+            current = artifacts.metadata.get(reference.artifact_id)
+            correlation_id = (
+                current.correlation_id if current is not None else work_order.work_order_id
+            )
+            artifacts.metadata.append_receipt(
+                reference.artifact_id,
+                "artifact.relay_authorized",
+                "broker:awr",
+                actor,
+                {
+                    "work_order_id": work_order.work_order_id,
+                    "sha256": reference.sha256,
+                    "bundle_sha256": bundle.bundle_sha256,
+                    "purpose": reference.purpose.value,
+                },
+                correlation_id=correlation_id,
+                work_order_id=work_order.work_order_id,
+            )
+
     def _route_and_dispatch(
         self,
         *,
@@ -284,6 +496,7 @@ class BrokerService:
                 duplicate=False,
                 executor_run_id=acknowledgement.executor_run_id,
                 ledger_sequence=existing_rejected.sequence,
+                bundle_sha256=work_order.bundle_sha256,
             )
 
         with self.store.lock_work_order(work_order.work_order_id) as session:
@@ -298,6 +511,7 @@ class BrokerService:
                     duplicate=True,
                     executor_run_id=str(existing_ack.payload["executor_run_id"]),
                     ledger_sequence=existing_ack.sequence,
+                    bundle_sha256=work_order.bundle_sha256,
                 )
             session.update_status(WorkStatus.PLANNING)
             acknowledged = session.append_ledger(
@@ -320,6 +534,7 @@ class BrokerService:
             duplicate=False,
             executor_run_id=acknowledgement.executor_run_id,
             ledger_sequence=acknowledged.sequence,
+            bundle_sha256=work_order.bundle_sha256,
         )
 
     def _ensure_routed(self, work_order: WorkOrder) -> LedgerEntry:
@@ -495,6 +710,7 @@ class BrokerService:
             candidate.repository_url,
             candidate.base_ref,
             candidate.content_sha256,
+            candidate.bundle_sha256,
         )
         comparable_existing = (
             existing.sender,
@@ -503,6 +719,7 @@ class BrokerService:
             existing.repository_url,
             existing.base_ref,
             existing.content_sha256,
+            existing.bundle_sha256,
         )
         if comparable_candidate != comparable_existing:
             raise WorkOrderValidationError(
@@ -519,16 +736,15 @@ class BrokerService:
         repository_url: str,
         base_ref: str,
         content_sha256: str,
+        bundle_sha256: str = "",
     ) -> str:
-        canonical = "|".join(
-            (
-                sender,
-                recipient,
-                directive,
-                parent or "",
-                repository_url,
-                base_ref,
-                content_sha256,
-            )
+        return replay_cache_key(
+            sender=sender,
+            recipient=recipient,
+            directive=directive,
+            parent=parent,
+            repository_url=repository_url,
+            base_ref=base_ref,
+            content_sha256=content_sha256,
+            bundle_sha256=bundle_sha256,
         )
-        return hashlib.sha256(canonical.encode("utf-8")).hexdigest()

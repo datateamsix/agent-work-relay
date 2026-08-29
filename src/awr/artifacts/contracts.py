@@ -200,6 +200,40 @@ class ScanClaim:
 
 
 @dataclass(frozen=True, slots=True)
+class ArtifactUploadTicket:
+    ticket_id: str
+    artifact_id: str
+    owner: str
+    token_hash: str
+    expires_at: str
+    spent_at: str | None
+    max_bytes: int
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "ticket_id": self.ticket_id,
+            "artifact_id": self.artifact_id,
+            "owner": self.owner,
+            "expires_at": self.expires_at,
+            "spent_at": self.spent_at,
+            "max_bytes": self.max_bytes,
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class WorkBundle:
+    markdown: str
+    references: tuple[ArtifactReference, ...]
+    bundle_sha256: str
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "bundle_sha256": self.bundle_sha256,
+            "references": [reference.to_dict() for reference in self.references],
+        }
+
+
+@dataclass(frozen=True, slots=True)
 class ArtifactReference:
     artifact_id: str
     purpose: ArtifactPurpose

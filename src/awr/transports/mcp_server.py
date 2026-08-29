@@ -16,7 +16,8 @@ def create_server(service: BrokerService | None = None) -> Any:
         "Agent Work Relay",
         instructions=(
             "Submit decorated Markdown work orders for plan-only Cursor runs. "
-            "Use refresh_planning to capture the terminal plan. Do not request execution."
+            "Use begin_artifact_intake plus PUT /v1/artifacts/{id}/content for binaries. "
+            "Do not request execution."
         ),
     )
     broker = service or build_service()
@@ -71,6 +72,87 @@ def create_server(service: BrokerService | None = None) -> Any:
     )
     def get_work_order_timeline(work_order_id: str) -> list[dict[str, Any]]:
         return broker.get_work_order_timeline(work_order_id)
+
+    @server.tool(
+        name="begin_artifact_intake",
+        title="Begin artifact intake",
+        description="Declare a supporting artifact and issue a one-time authenticated upload ticket.",
+        meta=_security_meta("awr:plan"),
+    )
+    def begin_artifact_intake(
+        original_filename: str,
+        declared_media_type: str,
+        purpose: str,
+        idempotency_key: str,
+        sender: str | None = None,
+        expected_byte_length: int | None = None,
+        expected_sha256: str | None = None,
+    ) -> dict[str, Any]:
+        return broker.begin_artifact_intake(
+            owner=sender,
+            original_filename=original_filename,
+            declared_media_type=declared_media_type,
+            purpose=purpose,
+            idempotency_key=idempotency_key,
+            expected_byte_length=expected_byte_length,
+            expected_sha256=expected_sha256,
+        )
+
+    @server.tool(
+        name="finalize_artifact_upload",
+        title="Finalize artifact upload",
+        description="Inspect a quarantined artifact and return its security status.",
+        meta=_security_meta("awr:plan"),
+    )
+    def finalize_artifact_upload(artifact_id: str, sender: str | None = None) -> dict[str, Any]:
+        return broker.finalize_artifact_upload(artifact_id, actor=sender)
+
+    @server.tool(
+        name="get_artifact_status",
+        title="Get artifact status",
+        description="Return artifact metadata and the latest security receipt. No paths or bytes.",
+        meta=_security_meta("awr:read"),
+    )
+    def get_artifact_status(artifact_id: str, sender: str | None = None) -> dict[str, Any]:
+        return broker.get_artifact_status(artifact_id, actor=sender)
+
+    @server.tool(
+        name="submit_work_bundle_for_planning",
+        title="Submit work bundle for planning",
+        description=(
+            "Accept a decorated Markdown work order plus immutable CLEAN artifact IDs. "
+            "Do not send file bytes or remote URLs."
+        ),
+        meta=_security_meta("awr:plan"),
+    )
+    def submit_work_bundle_for_planning(
+        markdown: str,
+        recipient: str,
+        sender: str | None = None,
+        repository_url: str | None = None,
+        base_ref: str | None = None,
+        idempotency_key: str | None = None,
+        artifact_ids: list[str] | None = None,
+    ) -> dict[str, Any]:
+        receipt = broker.submit_work_bundle_for_planning(
+            markdown=markdown,
+            sender=sender,
+            recipient=recipient,
+            repository_url=repository_url,
+            base_ref=base_ref,
+            idempotency_key=idempotency_key,
+            artifact_ids=artifact_ids,
+        )
+        return receipt.to_dict()
+
+    @server.tool(
+        name="get_work_order_artifacts",
+        title="Get work order artifacts",
+        description="Return immutable artifact references for a work order.",
+        meta=_security_meta("awr:read"),
+    )
+    def get_work_order_artifacts(work_order_id: str) -> list[dict[str, Any]]:
+        return broker.get_work_order_artifacts(work_order_id)
 
     return server
 

@@ -19,3 +19,7 @@ class ArtifactAccessError(ArtifactError):
 
 class ArtifactConflictError(ArtifactError):
     """Another worker holds a live scan lease for this artifact."""
+
+
+class ArtifactTicketError(ArtifactError):
+    """An upload ticket is missing, expired, spent, or bound to another actor."""
