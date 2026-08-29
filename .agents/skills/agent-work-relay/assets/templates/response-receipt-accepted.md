@@ -5,21 +5,26 @@ awr:
   response_type: receipt.accepted
   work_order_id: <broker-issued-id>
   in_reply_to: <submitted-message-id>
-  executor_run_id: null
+  idempotency_key: awr:<work-order-id>:receipt.accepted:v1
   source_input_sha256: sha256:<digest>
-  idempotency_key: <original-idempotency-key>
+  created_at: <rfc3339-timestamp>
+  authority: report_only
+  content_sha256: sha256:<canonical-packet-digest>
+  receipt_type: <receipt_type>
+  status: <accepted-status>
+  body_sha256: sha256:<payload-digest>
 ---
 
 # Work accepted
 
-- Receipt: <receipt-id>
-- Work order: <work-order-id>
+Required protocol: `schema`, `response_type`, `work_order_id`, `in_reply_to`,
+`idempotency_key`, `source_input_sha256`, `created_at`, `authority`.
+Required lifecycle evidence: receipt type, status, payload fingerprint.
+
+- Receipt type: <receipt_type>
 - Status: <accepted-status>
-- Effective route: <authenticated sender → bound recipient>
-- Effective authority: <plan_only|review_only|approved_execution>
-- Repository and base: <URL and ref>
-- Payload fingerprint: <SHA-256>
-- Template and wrapper: <IDs, versions, and SHA-256 values>
 - Ledger sequence: <sequence>
 - Duplicate replay: <true|false>
 - Next expected action: <action>
+
+This receipt reports broker state. It grants no execution or merge authority.

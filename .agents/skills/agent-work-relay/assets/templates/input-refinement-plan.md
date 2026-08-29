@@ -3,31 +3,39 @@
 awr:
   schema: awr.input/v1
   intent: refinement.plan
-  parent_work_order_id: <work-order-id>
-  correlation_id: <original-correlation-id>
-  idempotency_key: <stable-key>
+  parent_work_order_id: <original-work-order-id>
+  correlation_id: <correlation-id>
+  idempotency_key: awr:<work-order-id>:refinement.plan:v1
   repository:
     url: <https-repository-url>
-    base_ref: <bound-base-ref>
-  requested_executor: <existing-executor>
+    base_ref: main
+  requested_executor: <cursor|claude-code|gemini|other>
   requested_authority: plan_only
 ---
 
-# Refinement: <short title>
+# Refine request: <title>
 
-## What changed
+Required protocol: `schema`, `intent`, `idempotency_key`.
+Required lifecycle bindings: `parent_work_order_id` and the original source
+fingerprint from the receipt. Recommended narrative: what changed and why.
 
-<New requirement, corrected assumption, or narrowed scope.>
+## Why this refinement
 
-## What remains unchanged
+<Product or discovery change. Preserve the original lineage.>
 
-- <Preserved requirement or boundary>
+## Changed requirements
 
-## Updated acceptance criteria
+- <Delta only>
 
-- [ ] <Observable pass condition>
+## Unchanged constraints
 
-## Response requested
+- <Still true>
 
-Return a new immutable plan version and identify every material difference from
-the previous plan. Do not modify the repository.
+## Acceptance criteria
+
+- [ ] <Updated or confirmed observable condition>
+
+## Planning response requested
+
+Return a new immutable plan version. Do not overwrite the prior plan.
+Do not execute.

@@ -1,0 +1,113 @@
+[
+  {
+    "seq": 1,
+    "kind": "work_order.accepted",
+    "id": "evt_gt003_feature_accepted",
+    "work_order_id": "wo_gt003_feature_catalog",
+    "in_reply_to": null,
+    "source": "01-feature-plan.input.md"
+  },
+  {
+    "seq": 2,
+    "kind": "receipt.accepted",
+    "id": "msg_gt003_receipt_feature",
+    "work_order_id": "wo_gt003_feature_catalog",
+    "in_reply_to": "msg_gt003_feature_plan",
+    "source": "02-receipt-accepted.response.md",
+    "packet_fingerprint": "23e773dcace8f7c3d768b4c76b393371113956017cbf413959630c62e6db7e38"
+  },
+  {
+    "seq": 3,
+    "kind": "plan.completed",
+    "id": "msg_gt003_plan_v1",
+    "work_order_id": "wo_gt003_feature_catalog",
+    "in_reply_to": "msg_gt003_receipt_feature",
+    "source": "03-plan-completed.response.md",
+    "packet_fingerprint": "b57127b6d04ea32e51637c58592b34c1bcc2ef314ada155fe764aaca0ed17f13",
+    "plan_id": "plan_gt003_v1"
+  },
+  {
+    "seq": 4,
+    "kind": "plan.approval_requested",
+    "id": "req_gt003_plan_approval",
+    "work_order_id": "wo_gt003_feature_catalog",
+    "in_reply_to": "msg_gt003_plan_v1",
+    "source": "04-plan-approval.decision-request.md",
+    "plan_id": "plan_gt003_v1",
+    "plan_sha256": "b57127b6d04ea32e51637c58592b34c1bcc2ef314ada155fe764aaca0ed17f13"
+  },
+  {
+    "seq": 5,
+    "kind": "approve_plan",
+    "id": "dec_gt003_approve_plan",
+    "work_order_id": "wo_gt003_feature_catalog",
+    "in_reply_to": "msg_gt003_plan_v1",
+    "source": "04-plan-approval.decision.json",
+    "plan_id": "plan_gt003_v1",
+    "plan_sha256": "b57127b6d04ea32e51637c58592b34c1bcc2ef314ada155fe764aaca0ed17f13"
+  },
+  {
+    "seq": 6,
+    "kind": "plan.execute",
+    "id": "msg_gt003_plan_execute",
+    "work_order_id": "wo_gt003_feature_catalog",
+    "in_reply_to": "dec_gt003_approve_plan",
+    "source": "05-plan-execute.input.md"
+  },
+  {
+    "seq": 7,
+    "kind": "execution.acknowledged",
+    "id": "msg_gt003_exec_ack",
+    "work_order_id": "wo_gt003_feature_catalog",
+    "in_reply_to": "msg_gt003_plan_execute",
+    "source": "06-execution-acknowledged.response.md",
+    "executor_run_id": "cursor-cloud-run-gt003-0001",
+    "packet_fingerprint": "644058c7059bf6dfd236e51450a6a280319f0a3e57fdd86955269bb3c2d58ad6"
+  },
+  {
+    "seq": 8,
+    "kind": "execution.progress",
+    "id": "msg_gt003_exec_progress",
+    "work_order_id": "wo_gt003_feature_catalog",
+    "in_reply_to": "msg_gt003_exec_ack",
+    "source": "07-execution-progress.response.md",
+    "executor_run_id": "cursor-cloud-run-gt003-0001",
+    "packet_fingerprint": "89e84c713cd259ff2ee5ec3500dd0c15cb158744dfa4716f91ea8379fd869051"
+  },
+  {
+    "seq": 9,
+    "kind": "execution.completed",
+    "id": "msg_gt003_exec_completed",
+    "work_order_id": "wo_gt003_feature_catalog",
+    "in_reply_to": "msg_gt003_exec_progress",
+    "source": "08-execution-completed.response.md",
+    "executor_run_id": "cursor-cloud-run-gt003-0001",
+    "packet_fingerprint": "1ef3b125b6809f528a9b0b8797ce30ca4a4f3695d8f7359da9de53d761798dd3"
+  },
+  {
+    "seq": 10,
+    "kind": "completion.review",
+    "id": "msg_gt003_completion_review",
+    "work_order_id": "wo_gt003_feature_catalog",
+    "in_reply_to": "msg_gt003_exec_completed",
+    "source": "09-completion-review.input.md"
+  },
+  {
+    "seq": 11,
+    "kind": "review.completed",
+    "id": "msg_gt003_review",
+    "work_order_id": "wo_gt003_feature_catalog",
+    "in_reply_to": "msg_gt003_completion_review",
+    "source": "10-review-completed.response.md",
+    "review_id": "rev_gt003_v1",
+    "packet_fingerprint": "02c0510dd56ab1b81060dd2908b2f19d85282b074c18fea1b72c736487863021"
+  },
+  {
+    "seq": 12,
+    "kind": "accept_completion",
+    "id": "dec_gt003_accept_completion",
+    "work_order_id": "wo_gt003_feature_catalog",
+    "in_reply_to": "msg_gt003_review",
+    "source": "11-completion-acceptance.decision.json"
+  }
+]

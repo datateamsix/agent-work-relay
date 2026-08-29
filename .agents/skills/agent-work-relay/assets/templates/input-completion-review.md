@@ -5,24 +5,23 @@ awr:
   intent: completion.review
   parent_work_order_id: <work-order-id>
   correlation_id: <correlation-id>
-  idempotency_key: <stable-key>
-  completion_packet_id: <completion-packet-id>
+  idempotency_key: awr:<work-order-id>:completion.review:v1
+  completion_id: <completion-packet-id>
   completion_sha256: sha256:<digest>
-  requested_reviewer: <planner-or-review-agent>
   requested_authority: review_only
 ---
 
-# Review implementation completion
+# Completion review: <title>
 
-Review the approved plan, completion packet, repository evidence, and timeline.
+Required protocol: `schema`, `intent`, `idempotency_key`.
+Required lifecycle bindings: parent work order and completion fingerprint.
 
-## Review criteria
+## Review the
 
-- Approved scope matches actual changes
-- Acceptance criteria are individually evidenced
-- Tests and verification are reproducible
-- Security, data, migration, deployment, and rollback risks are addressed
-- No unauthorized external mutation occurred
-- Deviations and residual risks are explicit
+- approved plan fingerprint
+- completion packet
+- timeline and receipts
+- cited tests and artifact references
 
-Return `APPROVED`, `REVISION_REQUIRED`, or `REJECTED` with bounded findings.
+Return `review.completed` with `APPROVED`, `REVISE`, or `REJECTED`.
+This request asks for a recommendation. It does not close the work order.

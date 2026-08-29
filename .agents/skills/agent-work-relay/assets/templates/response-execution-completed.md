@@ -4,13 +4,19 @@ awr:
   schema: awr.response/v1
   response_type: execution.completed
   work_order_id: <work-order-id>
-  in_reply_to: <execution-input-message-id>
-  executor_run_id: <provider-run-id>
+  in_reply_to: <ack-or-progress-id>
+  idempotency_key: awr:<work-order-id>:execution.completed:v1
   source_input_sha256: sha256:<digest>
-  idempotency_key: <stable-key>
+  created_at: <rfc3339-timestamp>
+  authority: report_only
+  executor_run_id: <bound-provider-run-id>
+  content_sha256: sha256:<canonical-packet-digest>
 ---
 
-# Execution completion: <title>
+# Execution completed: <title>
+
+Required protocol fields are in the envelope. Required lifecycle bindings:
+bound run ID and source fingerprint. Do not paste complete logs or diffs.
 
 ## Outcome
 
@@ -24,7 +30,7 @@ awr:
 
 | Criterion | Result | Evidence |
 |---|---|---|
-| <criterion> | PASS / FAIL / NOT VERIFIED | <command, test, URL, or artifact> |
+| <criterion> | PASS / FAIL / NOT VERIFIED | <command, test, or artifact ID> |
 
 ## Verification
 
@@ -37,18 +43,15 @@ awr:
 - Repository: <URL>
 - Base commit: <SHA>
 - Final commit: <SHA>
-- Branch: <name or main>
+- Branch: <name>
 - Pull request: <URL or none>
-- Deployment: <reference or not performed>
 
 ## Migrations and operations
 
-- <Migration, configuration, secret name, or none; never include secret values>
+- <Migration or none. Never include secret values.>
 
-## Deviations, residual risks, and follow-up
+## Deviations, residual risk, and follow-up
 
 - <None or explicit item>
 
-## Security confirmation
-
-No credentials or secret values are included in this packet.
+This packet is `report_only`. It does not accept completion or authorize merge.

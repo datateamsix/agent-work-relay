@@ -5,27 +5,28 @@ awr:
   intent: plan.revise
   parent_work_order_id: <work-order-id>
   correlation_id: <correlation-id>
-  idempotency_key: <stable-key>
-  plan_id: <plan-id>
+  idempotency_key: awr:<work-order-id>:plan.revise:v1
+  plan_id: <returned-plan-id>
   plan_sha256: sha256:<digest>
-  requested_executor: <same-planning-agent>
   requested_authority: plan_only
 ---
 
-# Plan revision request
+# Revise plan: <title>
 
-## Review findings
+Required protocol: `schema`, `intent`, `idempotency_key`.
+Required lifecycle bindings: parent work order, exact `plan_id` and
+`plan_sha256`. Recommended narrative: bounded revision request.
 
-- <Specific issue in the existing plan>
+## Revision requested
 
-## Required changes
+<Specific change to the returned plan. Do not restated the entire plan.>
 
-- <Required revision>
+## Still in scope
 
-## Preserve
+- <Unchanged requirement>
 
-- <Approved or correct part of the plan>
+## Out of scope
 
-## Response requested
+- <Must not expand>
 
-Return a complete replacement plan as a new version, plus a concise change log.
+A plan revision is still plan-only. It does not authorize execution.

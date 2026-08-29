@@ -1,86 +1,72 @@
-# MCP surface for the bidirectional lifecycle
+# MCP tools and scopes
 
-## Minimal generalized tools
+The skill and the MCP connection are separate. This file maps roles to tools.
+[capability.md](capability.md) says which of those tools the current server
+may actually expose.
 
-| Tool | Caller | Purpose | Suggested scope |
-|---|---|---|---|
-| `submit_input` | Planner or reviewer | Accept an `@input` message and route it | `awr:input` |
-| `submit_response` | Worker, adapter, or reviewer | Accept an `@response` packet | `awr:response` |
-| `get_work_order` | Authorized participant | Return current projection and immutable refs | `awr:read` |
-| `get_work_order_timeline` | Authorized participant | Return ordered receipts and decisions | `awr:read` |
-| `list_pending_actions` | Authorized participant | Find questions, approvals, reviews, or work | `awr:read` |
-| `record_decision` | Human or authorized policy actor | Approve, reject, request revision, cancel | `awr:decide` |
-| `refresh_external_run` | Broker operator or task worker | Reconcile provider run state | `awr:refresh` |
+## Operational baseline scopes
 
-Keep the mutation surface small. Lifecycle meaning belongs in typed message
-envelopes and the domain state machine rather than proliferating one MCP tool
-per template.
+| Scope | Tools |
+|---|---|
+| `awr:plan` | `submit_prompt_for_planning`, `submit_work_bundle_for_planning`, `begin_artifact_intake`, `finalize_artifact_upload` |
+| `awr:read` | `get_plan`, `get_work_order`, `get_work_order_timeline`, `list_pending_actions`, `get_artifact_status`, `get_work_order_artifacts` |
+| `awr:refresh` | `refresh_planning` |
+| `awr:response` | `submit_response` |
+| `awr:decide` | `record_decision` |
 
-## `submit_input`
+Prepared EX-01 scope, do not claim it exists before discovery:
 
-Required arguments:
+| Scope | Expected tool |
+|---|---|
+| `awr:refresh` | `refresh_external_run` once the server lists it |
 
-- canonical decorated Markdown;
-- requested recipient or executor binding;
-- repository and base reference when code work is involved;
-- idempotency key;
-- optional parent work-order, plan, question, review, and artifact references.
+There is no `awr:input` or `submit_input` on the `762cbe4` runtime.
 
-The broker authenticates the caller, parses the envelope, validates state and
-authority, fingerprints the exact bytes, persists the message and ledger entry,
-routes it, and returns a durable receipt.
+## `submit_prompt_for_planning`
+
+Use for `@input` feature and refinement plans after the user asks to transmit.
+
+Required arguments: decorated Markdown, sender, recipient, repository URL
+unless the broker has a default, optional base ref, idempotency key.
 
 ## `submit_response`
 
-Required arguments:
-
-- canonical decorated Markdown;
-- work-order ID and immediate parent reference;
-- external agent and run identifiers when applicable;
-- source input fingerprint;
-- idempotency key;
-- optional evidence and artifact references.
-
-The broker verifies participant identity and lineage, fingerprints the response,
-applies the state transition, records the receipt, and makes the result available
-to the originator.
+Accepts one `@response` Markdown document. The packet must parse as
+`awr.response/v1` with `authority: report_only`. Bind `work_order_id`,
+`in_reply_to`, `source_input_sha256`, and a stable idempotency key. Repeat
+`executor_run_id` after acknowledgement.
 
 ## `record_decision`
 
-Decisions are structured and restricted. Bind them to the exact object under
-review:
+Restricted. Required: `decision_type`, `work_order_id`, `target_id`,
+`target_sha256`, `idempotency_key`, `permitted_action`, compact `rationale`
+(512 bytes). Optional `expires_at`.
 
-- decision type and outcome;
-- work-order and expected version;
-- plan, completion, or review ID and SHA-256;
-- permitted action and scope;
-- actor identity and rationale;
-- expiry when appropriate;
-- idempotency key.
+`request_plan_approval` is not a stored decision. It is a broker event.
 
-The message decorator never substitutes for this call.
+Allowed stored types on this baseline: `approve_plan`, `reject_plan`,
+`accept_completion`, `request_revision`, `cancel`.
 
-## Compatibility
+Merge, main-branch push, deployment, and destructive authorization remain
+separate restricted decisions. Do not invent them in a response packet.
 
-Server v0.1 planning tools map as follows:
+## Reads
 
-| Existing tool | Generalized equivalent |
+`get_work_order` and `list_pending_actions` authorize an explicit participant
+when supplied. `list_pending_actions` without a work-order ID is actor-scoped.
+Calling it with neither an actor nor a work-order ID is an error.
+
+## Artifact tools
+
+Intake is metadata plus a one-time `PUT /v1/artifacts/{id}/content`. MCP never
+accepts bytes. CLEAN status does not mean the executor received the body.
+
+## Compatibility aliases
+
+| Existing tool | Generalized intent |
 |---|---|
-| `submit_prompt_for_planning` | `submit_input` with feature/refinement plan |
-| `submit_work_bundle_for_planning` | `submit_input` plus artifact references |
-| `begin_artifact_intake` | artifact declaration + upload ticket |
-| `finalize_artifact_upload` | security-gate inspect |
-| `get_artifact_status` | artifact metadata read |
-| `get_work_order_artifacts` | immutable reference list |
-| `refresh_planning` | `refresh_external_run` |
-| `get_plan` | `get_work_order` result selection |
-| `get_work_order_timeline` | unchanged |
-
-Supporting binaries use authenticated `PUT /v1/artifacts/{id}/content` with
-`X-AWR-Upload-Token`. Do not place file bytes, base64 payloads, or remote URLs
-in MCP tool arguments.
-
-`awr.response/v1` packet schemas and `@response` Markdown rendering are defined
-for later slices. Do not call `submit_response` and do not treat execution or
-review templates as operational until AWR-LC-01 adds those tools, scopes, and
-state transitions.
+| `submit_prompt_for_planning` | `@input` feature or refinement plan |
+| `submit_work_bundle_for_planning` | same, plus CLEAN artifact IDs |
+| `refresh_planning` | planning-run refresh; not EX-01 execution refresh |
+| `get_plan` | stored plan packet |
+| `@awr feature.plan` | compatibility alias for `@input` + `feature.plan` |

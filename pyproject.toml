@@ -53,4 +53,4 @@ module = ["yaml", "yaml.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]
-pythonpath = ["src", "tests"]
+pythonpath = ["src", "tests", ".agents/skills/agent-work-relay/scripts"]

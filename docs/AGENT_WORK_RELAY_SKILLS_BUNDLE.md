@@ -1,34 +1,50 @@
 # Agent Work Relay skills bundle
 
-The AWR skill is a shared, provider-neutral operating layer for planning agents,
-coding agents, and review agents. Its core message grammar is intentionally
-small:
+The AWR skill is a shared, provider-neutral operating layer for planning
+agents, coding agents, review agents, broker adapters, and human decision
+makers. Its core message grammar is intentionally small:
 
 ```text
 @input     work moving toward the next agent
 @response  receipts, questions, results, and evidence moving back
 ```
 
-Lifecycle intent belongs in the typed AWR envelope rather than in an expanding
-set of top-level decorators.
+Lifecycle intent belongs in the typed AWR envelope rather than in extra
+top-level decorators. Neither decorator grants authority.
 
-## What is included
-
-The installable skill lives at:
+## Canonical location
 
 ```text
 .agents/skills/agent-work-relay/
 ```
 
-It contains:
+Do not create divergent planner, Cursor, Claude Code, Gemini, or reviewer
+copies. Client shims must point at this directory.
 
-- a role-neutral `SKILL.md` used by planners, workers, and reviewers;
-- progressive references for decorators, lifecycle, MCP tools, safety,
-  installation, and customization;
+The skill contains:
+
+- a concise `SKILL.md` that selects a role and loads one reference path;
+- role references for planner, worker, reviewer, adapter, and human;
+- shared references for lifecycle, decorators, MCP tools, capability,
+  idempotency, installation, and customization;
 - eight generalized `@input` templates;
 - eight generalized `@response` templates;
-- a machine-readable template manifest;
+- `assets/template-manifest.json` with exact SHA-256 fingerprints;
+- deterministic validation and fingerprint scripts;
 - OpenAI skill metadata declaring the AWR MCP dependency.
+
+Installation and MCP connection are separate. Credentials never live in the
+skill. See [`.agents/skills/agent-work-relay/references/installation.md`](../.agents/skills/agent-work-relay/references/installation.md).
+
+## Role routing
+
+| Role | Reference |
+|---|---|
+| Planning agent | `references/planner-workflows.md` |
+| Coding or execution agent | `references/worker-workflows.md` |
+| Review agent | `references/reviewer-workflows.md` |
+| Broker or trusted adapter | `references/adapter-workflows.md` |
+| Human decision-maker | `references/human-decisions.md` |
 
 ## Common lifecycle
 
@@ -37,47 +53,68 @@ stateDiagram-v2
     [*] --> Planning: feature.plan / bugfix.plan
     Planning --> PlanReady: plan.completed
     PlanReady --> Planning: plan.revise
-    PlanReady --> Executing: approved plan.execute
+    PlanReady --> WaitingApproval: plan.approval_requested
+    WaitingApproval --> Ready: approve_plan
+    Ready --> Dispatched: plan.execute
+    Dispatched --> Executing: execution.acknowledged
     Executing --> Blocked: question.blocked
     Blocked --> Executing: question.answer
     Executing --> CompletionReady: execution.completed
     Executing --> Failed: execution.failed
     CompletionReady --> Reviewing: completion.review
-    Reviewing --> Complete: review APPROVED
-    Reviewing --> Executing: implementation.refine
+    Reviewing --> HumanReview: review.completed
+    HumanReview --> Complete: accept_completion
+    HumanReview --> Executing: request_revision / implementation.refine
 ```
 
-Approvals and other authority decisions are restricted MCP actions. A decorator
-describes message direction and intent; it never grants authority.
+`review.completed` is a recommendation. Only a stored human or policy
+`accept_completion` decision closes the work order.
 
-## Current versus target MCP surface
+## Capability matrix
 
-The current hosted prototype supports the plan-only slice with four tools and
-legacy `@awr feature.plan` / `@awr refinement.plan` decorators. The bundle
-defines the target bidirectional protocol and the minimal additional tools:
+| Capability | Status on `762cbe4` | Notes |
+|---|---|---|
+| Markdown planning intake | Operational | `submit_prompt_for_planning` |
+| Secure work bundles / artifact metadata | Operational | intake, finalize, status, references |
+| `submit_response` | Operational | AS-03 `awr.response/v1` |
+| `record_decision` | Operational | human or authorized policy only |
+| Work-order and timeline reads | Operational | `get_work_order`, `get_work_order_timeline`, `list_pending_actions` |
+| Planning refresh / `get_plan` | Operational | not execution refresh |
+| LC-01B execution and review transitions | Operational | through submitted packets and stored decisions |
+| Real Cursor execution dispatch | Prepared (EX-01) | stop if the user asked to execute and tools are missing |
+| `refresh_external_run` | Prepared (EX-01) | do not invent the tool |
+| Durable execution reconciliation | Prepared (EX-01) | adapter-owned once listed |
+| Automatic ack / terminal capture | Prepared (EX-01) | not on this baseline |
+| CLEAN artifact byte delivery | Unavailable (AS-04) | executors receive `not_delivered` |
+| GCS / signed artifact access | Unavailable (AS-04) | never claim it |
 
-- `submit_input`
-- `submit_response`
-- `get_work_order`
-- `get_work_order_timeline`
-- `list_pending_actions`
-- `record_decision`
-- `refresh_external_run`
+Inspect the connected server's tool list before every mutation. Never claim
+a relay, execution, artifact delivery, or decision succeeded without a
+broker receipt.
 
-Until those tools and lifecycle transitions are implemented, the skill must not
-represent response, approval, or execution relay as operationally available.
+## Direct MCP versus adapter-return
 
-## Distribution model
+Workers with authenticated AWR tools retrieve the work order and submit
+`@response` packets through `submit_response`.
 
-The same canonical skill should be available to every participant. Cursor Cloud
-can discover the project-level `.agents/skills` copy directly. Other clients
-should install or reference this same directory through their native skill or
-instruction system and connect separately to the authenticated AWR MCP server.
-No tokens or client-specific credentials belong in the bundle.
+Cursor Cloud and other workers may not call AWR MCP. In adapter-return
+mode the worker returns one compact `@response` in the provider result.
+The trusted adapter validates and submits it. Direct outbound MCP is not
+required for Cursor execution.
 
-## Customization
+## Compact responses
 
-Teams may copy and modify the templates. Preserve the decorator, schema,
-lineage, authority binding, idempotency, and fingerprint fields. Give customized
-templates a new ID or version, and have AWR record the selected template and
-wrapper fingerprints in its receipt ledger.
+Large logs, complete diffs, reports, and screenshots belong in immutable
+artifact references. Response templates stay compact and always set
+`authority: report_only`.
+
+## Validation
+
+```bash
+uv run python .agents/skills/agent-work-relay/scripts/refresh_template_manifest.py
+uv run python .agents/skills/agent-work-relay/scripts/validate_skill_bundle.py
+uv run python .agents/skills/agent-work-relay/scripts/validate_gt003.py
+```
+
+Static GT-003 fixtures for Agent 1 live in
+[`examples/AWR-GT-003/`](../examples/AWR-GT-003/).

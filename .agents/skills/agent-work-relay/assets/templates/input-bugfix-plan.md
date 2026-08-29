@@ -5,7 +5,7 @@ awr:
   intent: bugfix.plan
   parent_work_order_id: null
   correlation_id: null
-  idempotency_key: <stable-key>
+  idempotency_key: awr:<client-correlation>:bugfix.plan:v1
   repository:
     url: <https-repository-url>
     base_ref: main
@@ -15,9 +15,13 @@ awr:
 
 # <Defect name>
 
+Required protocol: `schema`, `intent`, `idempotency_key`.
+Required lifecycle bindings: repository URL and base ref.
+Recommended narrative: observed, expected, reproduction, acceptance.
+
 ## Observed behavior
 
-<What happens now, including error or evidence?>
+<What happens now, including sanitized evidence.>
 
 ## Expected behavior
 
@@ -29,7 +33,7 @@ awr:
 
 ## Scope and impact
 
-<Affected users, data, environments, and severity.>
+<Users, data, environments, severity.>
 
 ## Constraints
 
@@ -39,9 +43,8 @@ awr:
 
 - [ ] Root cause is explained with repository evidence.
 - [ ] A regression test fails before and passes after the proposed fix.
-- [ ] <Additional observable condition>
 
 ## Planning response requested
 
-Return root-cause hypotheses, inspection plan, proposed correction, regression
-coverage, risk, and only genuinely blocking questions. Do not modify the repo.
+Return hypotheses, inspection plan, proposed correction, and only genuinely
+blocking questions. Do not modify the repository.
