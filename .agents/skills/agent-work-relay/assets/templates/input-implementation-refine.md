@@ -5,27 +5,24 @@ awr:
   intent: implementation.refine
   parent_work_order_id: <work-order-id>
   correlation_id: <correlation-id>
-  idempotency_key: <stable-key>
-  completion_packet_id: <completion-packet-id>
-  review_id: <review-id>
-  approval_receipt_id: <refinement-approval-id>
-  requested_executor: <existing-executor>
-  requested_authority: approved_refinement
+  idempotency_key: awr:<work-order-id>:implementation.refine:v1
+  plan_id: <approved-plan-id>
+  plan_sha256: sha256:<digest>
+  requested_authority: approved_execution
 ---
 
-# Implementation refinement: <title>
+# Implementation refine: <title>
 
-## Review findings to address
+Required protocol: `schema`, `intent`, `idempotency_key`.
+Required lifecycle bindings: original work-order lineage, approved plan ID
+and SHA-256. Recommended narrative: bounded follow-up only.
 
-- <Finding with acceptance criterion or evidence reference>
+## Follow-up requested
 
-## Preserve
+<What must change. Preserve the original lineage.>
 
-- <Correct existing behavior that must not regress>
+## Still approved
 
-## Completion evidence required
+- <Unchanged plan scope>
 
-- Focused regression evidence for each finding
-- Full relevant suite status
-- Exact new commit or pull-request references
-- Deviations and residual risk
+Do not start a new work order. Do not treat this as a new plan approval.

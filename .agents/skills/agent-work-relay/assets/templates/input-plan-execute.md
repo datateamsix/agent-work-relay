@@ -5,7 +5,7 @@ awr:
   intent: plan.execute
   parent_work_order_id: <work-order-id>
   correlation_id: <correlation-id>
-  idempotency_key: <stable-key>
+  idempotency_key: awr:<work-order-id>:plan.execute:v1
   plan_id: <approved-plan-id>
   plan_sha256: sha256:<digest>
   approval_receipt_id: <broker-issued-approval-id>
@@ -18,16 +18,23 @@ awr:
 
 # Execute approved plan: <title>
 
+Required protocol: `schema`, `intent`, `idempotency_key`.
+Required lifecycle bindings: parent work order, exact approved plan ID and
+SHA-256, and the stored approval receipt. Optional provider: executor hint.
+
 ## Approved scope
 
-<Concise scope bound by the approval receipt.>
+<Concise scope copied from the stored approval. Do not widen it.>
 
 ## Required evidence
 
 - Changes mapped to acceptance criteria
 - Commands and tests with results
-- Exact before/after commit and branch or pull-request references
-- Migrations, deployment changes, deviations, and residual risk
+- Exact before and after commits
+- Migrations, deviations, and residual risk as references
 
-Do not exceed the stored approval. Raise a blocking question for a material
-scope or authority ambiguity.
+This input does not itself grant authority. The broker must already have
+`approve_plan` for this fingerprint. A request to execute does not authorize
+merge, main-branch push, deployment, or completion acceptance.
+
+If EX-01 orchestration tools are not listed, stop and say so.

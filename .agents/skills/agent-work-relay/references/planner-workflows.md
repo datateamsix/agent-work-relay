@@ -1,45 +1,49 @@
-# Planner and reviewer workflows
+# Planner workflow
 
-## Send a new work item
+Load the matching `@input` template from `assets/templates/`. Drafting does
+not authorize transmission.
 
-1. Confirm the user asked to transmit the work, not merely draft it.
-2. Select `feature.plan` or `bugfix.plan` and load only its template.
-3. Make acceptance criteria observable and distinguish requirements from
-   preferences.
-4. Bind the repository and base reference explicitly.
-5. Submit through AWR and show the acceptance receipt.
+## Sequence
 
-## Refine a plan
+1. Draft a `feature.plan` or `bugfix.plan` work packet.
+2. Transmit only when the user asks to send it. On this baseline,
+   `submit_prompt_for_planning` accepts `feature.plan` and
+   `refinement.plan` only. If the draft is `bugfix.plan`, stop and say
+   that intake is missing; do not silently rewrite it as `feature.plan`.
+3. Show the durable acceptance receipt. Do not claim success without it.
+4. Retrieve the plan with `refresh_planning` or `get_plan`.
+5. For a bounded plan change, draft `plan.revise` bound to the plan ID and
+   SHA-256. Transmission requires `submit_input`, which is not on this
+   baseline. Stop and name that missing capability; do not send it through
+   `get_work_order`.
+6. Draft `question.answer` the same way. A clarification does not authorize
+   execution and cannot be transmitted until `submit_input` exists.
+7. Request human plan approval through the broker event
+   `plan.approval_requested`, not `record_decision`.
+8. After a human approves, the stored decision must cite the exact plan ID
+   and SHA-256. A request to plan does not authorize execution.
+9. Monitor approved execution only when EX-01 tools are listed. If they are
+   not, stop and say execution orchestration is unavailable.
+10. After completion, retrieve the completion packet, timeline, and evidence
+    references. Request `completion.review` when a recommendation is needed.
+11. Human acceptance or revision is `record_decision`. A request to execute
+    does not authorize merge, main-branch push, deployment, destructive
+    work, or completion acceptance.
 
-Use `refinement.plan` when the product request itself changed or more discovery
-is needed. Use `plan.revise` when reviewing a specific returned plan. Bind the
-parent work-order ID and plan ID; preserve the prior plan.
+## Bindings
 
-## Answer a worker question
+- Repository URL and base ref are explicit.
+- Acceptance criteria are observable.
+- Parent, plan, and source fingerprints come from receipts.
+- Idempotency follows [idempotency.md](idempotency.md).
 
-Use `question.answer`. Answer only the cited question IDs. State whether the
-answer changes scope, acceptance criteria, or authority. A product clarification
-does not authorize execution unless a separate approval record says so.
+## Tools this role may call
 
-## Authorize execution
+Reads: `get_work_order`, `get_plan`, `get_work_order_timeline`,
+`list_pending_actions`.
 
-First retrieve the plan and timeline. Verify the plan fingerprint, repository,
-base reference, requested scope, and unresolved questions. Record the human
-decision through the restricted decision tool. Only then submit `plan.execute`
-with the broker-issued approval reference.
+Mutations, only when listed and authorized: `submit_prompt_for_planning`,
+`submit_work_bundle_for_planning`, artifact intake tools.
 
-## Review completion
-
-Load `input-completion-review.md` and the returned completion packet. Check:
-
-- approved scope versus actual changes;
-- commit, branch, pull request, or main-branch refs;
-- tests and other verification evidence;
-- omitted, failed, or unverified acceptance criteria;
-- security, migration, rollout, and rollback risks;
-- unexpected repository or infrastructure mutations;
-- remaining questions and follow-up work.
-
-Return `review.completed` with `APPROVED`, `REVISION_REQUIRED`, or `REJECTED`.
-Do not approve solely because a worker says tests passed; prefer linked or
-reproducible evidence.
+Do not call `record_decision` as the planning agent unless the user is the
+decision principal and asked to record that decision.

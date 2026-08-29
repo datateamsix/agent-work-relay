@@ -5,22 +5,31 @@ awr:
   response_type: question.blocked
   work_order_id: <work-order-id>
   in_reply_to: <message-id>
-  executor_run_id: <provider-run-id>
+  idempotency_key: awr:<work-order-id>:question.blocked:v1
   source_input_sha256: sha256:<digest>
-  idempotency_key: <stable-key>
+  created_at: <rfc3339-timestamp>
+  authority: report_only
+  executor_run_id: <provider-run-id-or-omit>
+  content_sha256: sha256:<canonical-packet-digest>
 ---
 
 # Blocking questions
 
-## <question-id>: <short question>
+Required protocol fields are in the envelope. The parser reads the
+`questions` collection from `- <id>: <text>` lines. Do not ask preference
+questions that existing requirements already answer.
+
+- q1: <direct question>
+
+## q1
 
 **Why this blocks:** <Decision or risk that cannot be resolved safely.>
 
-**Options considered:**
+**Options and effects:**
 
 1. <Option and effect>
 2. <Option and effect>
 
-**Recommended default:** <Recommendation, if one is safe>
+**Safe recommendation:** <Recommendation, or none>
 
-**Work completed before blocking:** <None or safe read-only progress>
+**Last safe state:** <None, or read-only progress / last commit>

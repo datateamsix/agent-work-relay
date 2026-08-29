@@ -1,0 +1,12 @@
+{
+  "kind": "approve_plan",
+  "work_order_id": "wo_gt003_feature_catalog",
+  "decision_id": "dec_gt003_approve_plan",
+  "plan_id": "plan_gt003_v1",
+  "plan_sha256": "b57127b6d04ea32e51637c58592b34c1bcc2ef314ada155fe764aaca0ed17f13",
+  "target_id": "plan_gt003_v1",
+  "target_sha256": "b57127b6d04ea32e51637c58592b34c1bcc2ef314ada155fe764aaca0ed17f13",
+  "actor": "human:gt003.owner",
+  "rationale": "Exact plan approved for catalog search scope.",
+  "idempotency_key": "awr:wo_gt003_feature_catalog:approve_plan:plan_gt003_v1"
+}

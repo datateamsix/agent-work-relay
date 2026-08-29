@@ -1,23 +1,285 @@
 {
   "bundle": "agent-work-relay",
+  "manifest_version": 2,
   "protocol": "awr/v1",
-  "decorators": ["@input", "@response"],
+  "decorators": [
+    "@input",
+    "@response"
+  ],
+  "baseline_sha": "762cbe4820b2518fc8bbf494367279f1e930459c",
   "templates": [
-    {"id": "awr.input.feature-plan", "version": 1, "file": "templates/input-feature-plan.md"},
-    {"id": "awr.input.bugfix-plan", "version": 1, "file": "templates/input-bugfix-plan.md"},
-    {"id": "awr.input.refinement-plan", "version": 1, "file": "templates/input-refinement-plan.md"},
-    {"id": "awr.input.plan-revise", "version": 1, "file": "templates/input-plan-revise.md"},
-    {"id": "awr.input.plan-execute", "version": 1, "file": "templates/input-plan-execute.md"},
-    {"id": "awr.input.question-answer", "version": 1, "file": "templates/input-question-answer.md"},
-    {"id": "awr.input.implementation-refine", "version": 1, "file": "templates/input-implementation-refine.md"},
-    {"id": "awr.input.completion-review", "version": 1, "file": "templates/input-completion-review.md"},
-    {"id": "awr.response.receipt-accepted", "version": 1, "file": "templates/response-receipt-accepted.md"},
-    {"id": "awr.response.plan-completed", "version": 1, "file": "templates/response-plan-completed.md"},
-    {"id": "awr.response.question-blocked", "version": 1, "file": "templates/response-question-blocked.md"},
-    {"id": "awr.response.execution-acknowledged", "version": 1, "file": "templates/response-execution-acknowledged.md"},
-    {"id": "awr.response.execution-progress", "version": 1, "file": "templates/response-execution-progress.md"},
-    {"id": "awr.response.execution-completed", "version": 1, "file": "templates/response-execution-completed.md"},
-    {"id": "awr.response.execution-failed", "version": 1, "file": "templates/response-execution-failed.md"},
-    {"id": "awr.response.review-completed", "version": 1, "file": "templates/response-review-completed.md"}
+    {
+      "id": "awr.input.feature-plan",
+      "template_version": 2,
+      "direction": "input",
+      "intent_or_response_type": "feature.plan",
+      "applicable_roles": [
+        "planner"
+      ],
+      "schema_version": "awr.input/v1",
+      "required_mcp_capability": "submit_prompt_for_planning",
+      "required_oauth_scope": "awr:plan",
+      "minimum_lifecycle_capability": "baseline",
+      "operational_status": "operational",
+      "file": "templates/input-feature-plan.md",
+      "sha256": "ad148f5312295064beee3d2fb459d5468ea434ce330a8cec3aa7f7016f0e6058"
+    },
+    {
+      "id": "awr.input.bugfix-plan",
+      "template_version": 2,
+      "direction": "input",
+      "intent_or_response_type": "bugfix.plan",
+      "applicable_roles": [
+        "planner"
+      ],
+      "schema_version": "awr.input/v1",
+      "required_mcp_capability": "submit_input",
+      "required_oauth_scope": "awr:plan",
+      "minimum_lifecycle_capability": "submit_input",
+      "operational_status": "prepared",
+      "missing_capability": "submit_input",
+      "file": "templates/input-bugfix-plan.md",
+      "sha256": "65885aac10247c1f3e852f08ba32fd41eee2b0251bad380a1802ee7b5b618559"
+    },
+    {
+      "id": "awr.input.refinement-plan",
+      "template_version": 2,
+      "direction": "input",
+      "intent_or_response_type": "refinement.plan",
+      "applicable_roles": [
+        "planner"
+      ],
+      "schema_version": "awr.input/v1",
+      "required_mcp_capability": "submit_prompt_for_planning",
+      "required_oauth_scope": "awr:plan",
+      "minimum_lifecycle_capability": "baseline",
+      "operational_status": "operational",
+      "file": "templates/input-refinement-plan.md",
+      "sha256": "5d5a1e687cf88b772d7e05baddc22d64990ac6ffb9df67e041209775c35fa228"
+    },
+    {
+      "id": "awr.input.plan-revise",
+      "template_version": 2,
+      "direction": "input",
+      "intent_or_response_type": "plan.revise",
+      "applicable_roles": [
+        "planner"
+      ],
+      "schema_version": "awr.input/v1",
+      "required_mcp_capability": "submit_input",
+      "required_oauth_scope": "awr:plan",
+      "minimum_lifecycle_capability": "submit_input",
+      "operational_status": "prepared",
+      "missing_capability": "submit_input",
+      "file": "templates/input-plan-revise.md",
+      "sha256": "4997e6cc05c17b3dd8c52a0f24fbaeb5bf2b1facec855a4ee50c4ff682025357"
+    },
+    {
+      "id": "awr.input.plan-execute",
+      "template_version": 2,
+      "direction": "input",
+      "intent_or_response_type": "plan.execute",
+      "applicable_roles": [
+        "planner",
+        "adapter"
+      ],
+      "schema_version": "awr.input/v1",
+      "required_mcp_capability": "submit_input",
+      "required_oauth_scope": "awr:plan",
+      "minimum_lifecycle_capability": "ex-01",
+      "operational_status": "prepared",
+      "missing_capability": "submit_input; AWR-EX-01",
+      "file": "templates/input-plan-execute.md",
+      "sha256": "9b60dbcb1cd88691c23650d84512ad7632e7c2285022e4c7059443dba1c71ff8"
+    },
+    {
+      "id": "awr.input.question-answer",
+      "template_version": 2,
+      "direction": "input",
+      "intent_or_response_type": "question.answer",
+      "applicable_roles": [
+        "planner",
+        "human"
+      ],
+      "schema_version": "awr.input/v1",
+      "required_mcp_capability": "submit_input",
+      "required_oauth_scope": "awr:plan",
+      "minimum_lifecycle_capability": "submit_input",
+      "operational_status": "prepared",
+      "missing_capability": "submit_input",
+      "file": "templates/input-question-answer.md",
+      "sha256": "64f8e3b191a500e255386323641528096f2f0f11d9054f8d84b47e480a832936"
+    },
+    {
+      "id": "awr.input.implementation-refine",
+      "template_version": 2,
+      "direction": "input",
+      "intent_or_response_type": "implementation.refine",
+      "applicable_roles": [
+        "planner",
+        "adapter"
+      ],
+      "schema_version": "awr.input/v1",
+      "required_mcp_capability": "submit_input",
+      "required_oauth_scope": "awr:plan",
+      "minimum_lifecycle_capability": "ex-01",
+      "operational_status": "prepared",
+      "missing_capability": "submit_input; AWR-EX-01",
+      "file": "templates/input-implementation-refine.md",
+      "sha256": "642aa4f31a82ea9fd83b4062fd11043e3ff1c004df09c5e9e6a08a70f1d2ceea"
+    },
+    {
+      "id": "awr.input.completion-review",
+      "template_version": 2,
+      "direction": "input",
+      "intent_or_response_type": "completion.review",
+      "applicable_roles": [
+        "planner",
+        "adapter"
+      ],
+      "schema_version": "awr.input/v1",
+      "required_mcp_capability": "submit_input",
+      "required_oauth_scope": "awr:plan",
+      "minimum_lifecycle_capability": "submit_input",
+      "operational_status": "prepared",
+      "missing_capability": "submit_input",
+      "file": "templates/input-completion-review.md",
+      "sha256": "1e88e499391487252269cad77482ce8cd7a8fd40299c89d4089afeb030fca265"
+    },
+    {
+      "id": "awr.response.receipt-accepted",
+      "template_version": 2,
+      "direction": "response",
+      "intent_or_response_type": "receipt.accepted",
+      "applicable_roles": [
+        "adapter"
+      ],
+      "schema_version": "awr.response/v1",
+      "required_mcp_capability": "get_work_order",
+      "required_oauth_scope": "awr:read",
+      "minimum_lifecycle_capability": "baseline",
+      "operational_status": "operational",
+      "file": "templates/response-receipt-accepted.md",
+      "sha256": "e7e4cf4bfed5a62041bcf290838af310b93e695f6e7837046b6d3b21e876ed97"
+    },
+    {
+      "id": "awr.response.plan-completed",
+      "template_version": 2,
+      "direction": "response",
+      "intent_or_response_type": "plan.completed",
+      "applicable_roles": [
+        "worker",
+        "adapter"
+      ],
+      "schema_version": "awr.response/v1",
+      "required_mcp_capability": "submit_response",
+      "required_oauth_scope": "awr:response",
+      "minimum_lifecycle_capability": "baseline",
+      "operational_status": "operational",
+      "file": "templates/response-plan-completed.md",
+      "sha256": "bc91b50f9e80378e10a39fc33fa3ce365e6ba96bc3825ae925cd600fb41f9229"
+    },
+    {
+      "id": "awr.response.question-blocked",
+      "template_version": 3,
+      "direction": "response",
+      "intent_or_response_type": "question.blocked",
+      "applicable_roles": [
+        "worker",
+        "adapter"
+      ],
+      "schema_version": "awr.response/v1",
+      "required_mcp_capability": "submit_response",
+      "required_oauth_scope": "awr:response",
+      "minimum_lifecycle_capability": "baseline",
+      "operational_status": "operational",
+      "file": "templates/response-question-blocked.md",
+      "sha256": "fb8c5b3763b6ce1a985a4b1e7496b16c293a9efbb35527be042b5dca22a30f48"
+    },
+    {
+      "id": "awr.response.execution-acknowledged",
+      "template_version": 2,
+      "direction": "response",
+      "intent_or_response_type": "execution.acknowledged",
+      "applicable_roles": [
+        "worker",
+        "adapter"
+      ],
+      "schema_version": "awr.response/v1",
+      "required_mcp_capability": "submit_response",
+      "required_oauth_scope": "awr:response",
+      "minimum_lifecycle_capability": "baseline",
+      "operational_status": "operational",
+      "file": "templates/response-execution-acknowledged.md",
+      "sha256": "89f24f62d0e9beae5d7aa469e8b2772e1a9dbd86f3422467f8fa21ce80467a15"
+    },
+    {
+      "id": "awr.response.execution-progress",
+      "template_version": 2,
+      "direction": "response",
+      "intent_or_response_type": "execution.progress",
+      "applicable_roles": [
+        "worker",
+        "adapter"
+      ],
+      "schema_version": "awr.response/v1",
+      "required_mcp_capability": "submit_response",
+      "required_oauth_scope": "awr:response",
+      "minimum_lifecycle_capability": "baseline",
+      "operational_status": "operational",
+      "file": "templates/response-execution-progress.md",
+      "sha256": "c5abb8019374cdec086fb802c50d6e848a9ec5fbca3cb84071a806b167b70a74"
+    },
+    {
+      "id": "awr.response.execution-completed",
+      "template_version": 2,
+      "direction": "response",
+      "intent_or_response_type": "execution.completed",
+      "applicable_roles": [
+        "worker",
+        "adapter"
+      ],
+      "schema_version": "awr.response/v1",
+      "required_mcp_capability": "submit_response",
+      "required_oauth_scope": "awr:response",
+      "minimum_lifecycle_capability": "baseline",
+      "operational_status": "operational",
+      "file": "templates/response-execution-completed.md",
+      "sha256": "87b617564ca3e843acfb10b726118bd46862e93c0d232605da949959d7aeecfe"
+    },
+    {
+      "id": "awr.response.execution-failed",
+      "template_version": 2,
+      "direction": "response",
+      "intent_or_response_type": "execution.failed",
+      "applicable_roles": [
+        "worker",
+        "adapter"
+      ],
+      "schema_version": "awr.response/v1",
+      "required_mcp_capability": "submit_response",
+      "required_oauth_scope": "awr:response",
+      "minimum_lifecycle_capability": "baseline",
+      "operational_status": "operational",
+      "file": "templates/response-execution-failed.md",
+      "sha256": "45b29343862bf3879e63f66429d61a18fe07be5f920e29a7949e5713c6af35e9"
+    },
+    {
+      "id": "awr.response.review-completed",
+      "template_version": 3,
+      "direction": "response",
+      "intent_or_response_type": "review.completed",
+      "applicable_roles": [
+        "reviewer",
+        "adapter"
+      ],
+      "schema_version": "awr.response/v1",
+      "required_mcp_capability": "submit_response",
+      "required_oauth_scope": "awr:response",
+      "minimum_lifecycle_capability": "baseline",
+      "operational_status": "operational",
+      "file": "templates/response-review-completed.md",
+      "sha256": "65730ac3441e8b5c435e97d42e138ccc5b325203dcd25960cdbbf54dd31e8606"
+    }
   ]
 }

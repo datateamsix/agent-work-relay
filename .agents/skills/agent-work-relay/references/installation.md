@@ -1,49 +1,84 @@
 # Installing the shared skill and MCP connection
 
 The canonical portable skill is the complete `agent-work-relay/` directory.
-Install the same directory in each agent environment; do not maintain divergent
-planner and worker copies.
+Install that same directory everywhere. Do not maintain divergent planner,
+Cursor, Claude Code, Gemini, or reviewer copies.
+
+The skill provides behavior, templates, and guardrails. MCP provides
+authenticated tools. OAuth provides identity and scopes. Credentials never
+live in the skill, templates, fixtures, or examples.
+
+## ChatGPT and Codex
+
+Official Codex/ChatGPT skills are a directory with `SKILL.md` (name and
+description required). Codex loads name and description first, then the
+full file when the skill is selected.
+
+Repository discovery: `.agents/skills/` from the working directory upward
+to the repository root. Personal skills: `~/.agents/skills/` or
+`$CODEX_HOME/skills`.
+
+Keep this bundle at `.agents/skills/agent-work-relay/` in the destination
+repository. Mention it with `$agent-work-relay` or let the description
+trigger it. Connect the AWR Streamable HTTP MCP server separately and
+complete OAuth. The `agents/openai.yaml` file declares the MCP dependency;
+it does not create the connection or store a token.
+
+If a Codex/OpenAI skill linter is available in the environment, run it on
+this directory. This repository also runs
+`scripts/validate_skill_bundle.py`.
 
 ## Cursor and Cursor Cloud
 
-Keep the skill in the destination repository at:
+Keep the project-level copy at:
 
 ```text
 .agents/skills/agent-work-relay/
 ```
 
-Project-level storage is important for remote or cloud agents that cannot see a
-developer machine's global skill directory. Connect the remote AWR Streamable
-HTTP endpoint through Cursor's project or managed MCP configuration and complete
-OAuth. Do not commit bearer tokens.
+Remote or cloud agents cannot see a laptop global skill directory.
+Configure AWR MCP in project or managed settings. Do not commit bearer
+tokens.
 
-## ChatGPT and Codex
-
-Install the skill bundle in the workspace or project skill catalog and connect
-the authenticated AWR remote MCP server separately. The skill declares the MCP
-dependency but does not contain credentials or create the connection.
+Cursor Cloud transport is capability-detected. Use direct MCP only when
+that environment lists outbound AWR tools. Otherwise use adapter-return
+mode from [worker-workflows.md](worker-workflows.md). Do not tell a cloud
+worker it must open outbound MCP.
 
 ## Claude Code
 
-Install the canonical directory using Claude Code's supported project skill
-location. If the installed version does not discover Agent Skills, reference the
-canonical `SKILL.md` from the project's instruction file. Configure the same AWR
-MCP endpoint through Claude Code's MCP configuration and OAuth flow.
+Claude Code discovers Agent Skills from `.claude/skills/`. Do not copy
+this bundle into a second maintained tree. Symlink or otherwise point
+`.claude/skills/agent-work-relay` at this canonical directory:
+
+```text
+.agents/skills/agent-work-relay/
+```
+
+If the client does not load the symlink, point `CLAUDE.md` at this
+`SKILL.md`. Configure the same AWR MCP endpoint through Claude Code MCP
+settings and OAuth.
 
 ## Gemini CLI
 
-Use project `GEMINI.md` instructions to import or direct the agent to the
-canonical skill, then configure AWR as a remote MCP server in project settings.
-Keep the canonical skill as the single source of truth.
+Point `GEMINI.md` or project settings at this canonical `SKILL.md`. Add
+AWR as a remote MCP server in project settings. Do not copy the skill
+into a second maintained tree.
 
-## Connection verification
+## Other MCP-capable agents
 
-Before a live relay, verify that the client can:
+If a client needs a shim, the shim must reference this directory. Do not
+fork templates per vendor.
 
-1. discover AWR tools;
-2. complete OAuth without exposing tokens;
-3. call a read-only tool;
-4. see the expected protocol version and scopes;
-5. submit an idempotent test message;
-6. retrieve its receipt and timeline;
-7. reject an unauthorized decision or execution attempt.
+## Connection checks
+
+Before a live relay:
+
+1. Discover AWR tools.
+2. Complete OAuth without writing tokens into the repo.
+3. Call a read-only tool.
+4. Confirm expected scopes (`awr:plan`, `awr:read`, `awr:refresh`,
+   `awr:response`, `awr:decide`).
+5. Submit an idempotent planning message only if asked.
+6. Retrieve the receipt and timeline.
+7. Confirm an unauthorized decision is rejected.

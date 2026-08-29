@@ -5,7 +5,7 @@ awr:
   intent: feature.plan
   parent_work_order_id: null
   correlation_id: null
-  idempotency_key: <stable-key>
+  idempotency_key: awr:<client-correlation>:feature.plan:v1
   repository:
     url: <https-repository-url>
     base_ref: main
@@ -15,13 +15,17 @@ awr:
 
 # <Feature name>
 
+Required protocol: `schema`, `intent`, `idempotency_key`.
+Required lifecycle bindings: repository URL and base ref for code work.
+Recommended narrative: the sections below. Optional provider: executor hint.
+
 ## Outcome
 
 <What should become possible and for whom?>
 
 ## Context
 
-<Relevant product, architecture, and user context.>
+<Relevant product and architecture context. Do not paste the full repository.>
 
 ## Requirements
 
@@ -33,14 +37,13 @@ awr:
 
 ## Constraints and non-goals
 
-- <Boundary, compatibility requirement, or deliberate exclusion>
+- <Boundary or deliberate exclusion>
 
 ## Relevant artifacts
 
-- <Artifact ID, URI, or none>
+- <Artifact ID or none. Do not embed file bytes.>
 
 ## Planning response requested
 
-Return existing architecture, implementation steps, affected files and
-contracts, test plan, risks, assumptions, and only genuinely blocking questions.
-Do not modify the repository.
+Return a compact `plan.completed` packet. Do not modify the repository.
+This draft does not authorize transmission, execution, merge, or deploy.
