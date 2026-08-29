@@ -9,10 +9,18 @@ RuntimeEnv = Literal["local", "test", "production"]
 SecurityMode = Literal["enforce"]
 SecurityScannerKind = Literal["clamav", "fake_clean", "fake_eicar"]
 
-AWR_SCOPES = ("awr:plan", "awr:read", "awr:refresh", "awr:response", "awr:decide")
+AWR_SCOPES = (
+    "awr:plan",
+    "awr:read",
+    "awr:refresh",
+    "awr:response",
+    "awr:decide",
+    "awr:execute",
+)
 TOOL_SCOPES = {
     "submit_prompt_for_planning": "awr:plan",
     "refresh_planning": "awr:refresh",
+    "refresh_external_run": "awr:execute",
     "get_plan": "awr:read",
     "get_work_order": "awr:read",
     "get_work_order_timeline": "awr:read",

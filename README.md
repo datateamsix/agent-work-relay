@@ -189,6 +189,9 @@ tools now consume those packets:
 - `submit_response` (`awr:response`) — parse and persist an AS-03 packet;
 - `record_decision` (`awr:decide`) — store an authenticated approval, rejection,
   cancellation, or completion acceptance with a required compact rationale;
+- `refresh_external_run` (`awr:execute`) — create or advance a durable
+  execution-dispatch intent and reconcile the provider run. `awr:read` cannot
+  dispatch. Approval stays on `awr:decide` and never performs Cursor I/O;
 - `list_pending_actions` (`awr:read`) — actor-scoped next actions, or the
   pending set for a required `work_order_id`;
 - `get_work_order` (`awr:read`) — durable status, lifecycle snapshot, and
@@ -199,6 +202,8 @@ enters `EXECUTING` only after `READY_FOR_EXECUTION` → `EXECUTION_DISPATCHED` �
 `execution.acknowledged`. Review approval does not close a work order.
 
 The lifecycle edge table is documented in [docs/AWR-LC-01B.md](docs/AWR-LC-01B.md).
+Durable execution dispatch and Cursor fail-closed recovery are documented in
+[docs/AWR-EX-01.md](docs/AWR-EX-01.md).
 
 `submit_prompt_for_planning` accepts:
 
@@ -242,6 +247,7 @@ docs/
   CURSOR_PRODUCT_SUMMARY_AND_CLOUD_RUN_BUILD.md
   CURSOR_SECURE_ARTIFACT_RELAY_BUILD_PROMPTS.md
   AWR-GT-001.md
+  AWR-EX-01.md
   LIVE_PROTOTYPE.md
 ```
 

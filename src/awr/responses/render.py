@@ -85,7 +85,7 @@ def _body(packet: ResponsePacket) -> str:
         case ResponseType.EXECUTION_COMPLETED:
             return f"# Execution completed\n\n{payload['summary']}"
         case ResponseType.EXECUTION_FAILED:
-            return f"# Execution failed\n\n{payload['error_type']}: {payload['message']}"
+            return f"# Execution failed\n\n{payload['message']}"
         case ResponseType.REVIEW_COMPLETED:
             return f"# Review {payload['outcome']}\n\n{payload['rationale']}"
         case _:

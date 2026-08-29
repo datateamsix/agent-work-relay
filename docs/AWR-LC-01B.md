@@ -98,6 +98,7 @@ lifecycle snapshot in the same work-order transaction as the ledger append.
 |---|---|
 | `submit_response` | `awr:response` |
 | `record_decision` | `awr:decide` |
+| `refresh_external_run` | `awr:execute` |
 | `list_pending_actions` | `awr:read` |
 | `get_work_order` | `awr:read` |
 

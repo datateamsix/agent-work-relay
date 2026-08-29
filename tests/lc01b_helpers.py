@@ -147,6 +147,42 @@ class LifecycleHarness:
         receipt = self.service.submit_response(markdown=markdown, actor=actor)
         return markdown, parsed, receipt
 
+    def complete_plan(
+        self, work_order_id: str, *, key: str = "plan-completed"
+    ) -> dict[str, object]:
+        _, _, receipt = self.submit(
+            response_type=ResponseType.PLAN_COMPLETED,
+            work_order_id=work_order_id,
+            payload=plan_payload(),
+            actor=RECIPIENT,
+            idempotency_key=key,
+        )
+        return receipt
+
+    def approve_exact_plan(
+        self, work_order_id: str, *, key: str = "approve-plan"
+    ) -> dict[str, object]:
+        lifecycle = self.projection(work_order_id)["lifecycle"]
+        assert isinstance(lifecycle, dict)
+        return self.service.record_decision(
+            decision_type="approve_plan",
+            work_order_id=work_order_id,
+            actor=SENDER,
+            target_id=str(lifecycle["plan_id"]),
+            target_sha256=str(lifecycle["plan_sha256"]),
+            idempotency_key=key,
+            permitted_action="plan.execute",
+            rationale="Approve the stored plan fingerprint.",
+        )
+
+    def reach_ready_for_execution(self, *, key: str = "ready") -> str:
+        work_order_id = self.accept_planning(key=f"{key}-submit")
+        self.complete_plan(work_order_id, key=f"{key}-plan")
+        self.service.request_plan_approval(work_order_id, actor=SENDER)
+        approved = self.approve_exact_plan(work_order_id, key=f"{key}-approve")
+        assert approved["status"] == WorkStatus.READY_FOR_EXECUTION.value
+        return work_order_id
+
 
 def plan_payload(content: str = PLAN_BODY, plan_id: str = "PLAN-1") -> dict[str, object]:
     return {

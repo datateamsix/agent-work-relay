@@ -63,7 +63,9 @@ they never grant execution, merge, deployment, or destructive authority.
 Large logs, diffs, reports, and visual evidence are artifact references, not
 inline packet fields. `submit_response` parses packets with the AS-03
 `parse_response_markdown` path. Stored decisions, not responses, grant
-authority. See [docs/AWR-LC-01B.md](AWR-LC-01B.md).
+authority. See [docs/AWR-LC-01B.md](AWR-LC-01B.md). Approved execution uses a
+durable dispatch outbox and `refresh_external_run`; see
+[docs/AWR-EX-01.md](AWR-EX-01.md).
 
 `ArtifactSecurityService.inspect` is the only path that may move an artifact
 from `QUARANTINED` to `SCANNING` or `CLEAN`. Intake (`ArtifactService`) writes

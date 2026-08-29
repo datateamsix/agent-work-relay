@@ -95,6 +95,12 @@ class OAuthResourceMiddleware:
             and path.endswith("/refresh")
         ):
             return "awr:refresh"
+        if (
+            method.upper() == "POST"
+            and path.startswith("/v1/work-orders/")
+            and path.endswith("/refresh-external")
+        ):
+            return "awr:execute"
         if method.upper() == "GET" and path.startswith("/v1/planning/"):
             return "awr:read"
         if method.upper() == "GET" and path.startswith("/v1/artifacts/"):

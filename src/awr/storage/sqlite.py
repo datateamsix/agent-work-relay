@@ -4,6 +4,7 @@ import json
 import sqlite3
 from collections.abc import Iterator
 from contextlib import contextmanager
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
@@ -103,6 +104,36 @@ CREATE TABLE IF NOT EXISTS decisions (
 CREATE TABLE IF NOT EXISTS lifecycle_snapshots (
     work_order_id TEXT PRIMARY KEY,
     snapshot_json TEXT NOT NULL,
+    FOREIGN KEY (work_order_id) REFERENCES work_orders(work_order_id)
+);
+
+CREATE TABLE IF NOT EXISTS execution_dispatches (
+    dispatch_id TEXT PRIMARY KEY,
+    work_order_id TEXT NOT NULL,
+    attempt INTEGER NOT NULL,
+    plan_id TEXT NOT NULL,
+    plan_sha256 TEXT NOT NULL,
+    approval_decision_id TEXT NOT NULL,
+    executor TEXT NOT NULL,
+    repository_url TEXT NOT NULL,
+    base_ref TEXT NOT NULL,
+    wrapper_id TEXT NOT NULL,
+    wrapper_version TEXT NOT NULL,
+    wrapper_sha256 TEXT NOT NULL,
+    provider_idempotency_key TEXT NOT NULL UNIQUE,
+    state TEXT NOT NULL,
+    attempt_count INTEGER NOT NULL DEFAULT 0,
+    lease_owner TEXT,
+    lease_expires_at TEXT,
+    provider_agent_id TEXT,
+    provider_run_id TEXT,
+    last_failure_code TEXT,
+    wrapped_markdown TEXT NOT NULL,
+    existing_agent_id TEXT,
+    receipt_json TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    UNIQUE (work_order_id, attempt),
     FOREIGN KEY (work_order_id) REFERENCES work_orders(work_order_id)
 );
 """
@@ -482,6 +513,68 @@ class SQLiteStateStore:
                 raise KeyError(f"Unknown work order: {work_order_id}")
             yield _SQLiteWorkOrderSession(self, connection, work_order_id)
 
+    def get_execution_dispatch(self, dispatch_id: str) -> dict[str, Any] | None:
+        with self._connection() as connection:
+            row = connection.execute(
+                "SELECT * FROM execution_dispatches WHERE dispatch_id = ?",
+                (dispatch_id,),
+            ).fetchone()
+            return None if row is None else _row_to_dispatch(row)
+
+    def list_execution_dispatches(self, work_order_id: str) -> list[dict[str, Any]]:
+        with self._connection() as connection:
+            rows = connection.execute(
+                """
+                SELECT * FROM execution_dispatches
+                WHERE work_order_id = ? ORDER BY attempt
+                """,
+                (work_order_id,),
+            ).fetchall()
+            return [_row_to_dispatch(row) for row in rows]
+
+    def claim_execution_lease(
+        self,
+        dispatch_id: str,
+        *,
+        owner: str,
+        now: str,
+        ttl_seconds: float,
+    ) -> dict[str, Any] | None:
+        expires = (datetime.fromisoformat(now) + timedelta(seconds=ttl_seconds)).isoformat()
+        with self._connection() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            row = connection.execute(
+                "SELECT * FROM execution_dispatches WHERE dispatch_id = ?",
+                (dispatch_id,),
+            ).fetchone()
+            if row is None:
+                return None
+            current = _row_to_dispatch(row)
+            if current["state"] in {"ACKNOWLEDGED", "FAILED"}:
+                return current
+            lease_expires = current.get("lease_expires_at")
+            if (
+                current["state"] == "LEASED"
+                and isinstance(lease_expires, str)
+                and lease_expires > now
+                and current.get("lease_owner") != owner
+            ):
+                return None
+            connection.execute(
+                """
+                UPDATE execution_dispatches
+                SET state = ?, lease_owner = ?, lease_expires_at = ?,
+                    attempt_count = attempt_count + 1, updated_at = ?
+                WHERE dispatch_id = ?
+                """,
+                ("LEASED", owner, expires, now, dispatch_id),
+            )
+            updated = connection.execute(
+                "SELECT * FROM execution_dispatches WHERE dispatch_id = ?",
+                (dispatch_id,),
+            ).fetchone()
+            return None if updated is None else _row_to_dispatch(updated)
+
     @staticmethod
     def _row_to_work_order(row: sqlite3.Row) -> WorkOrder:
         return WorkOrder(
@@ -627,6 +720,27 @@ class _SQLiteWorkOrderSession:
             "receipt": receipt,
         }
 
+    def get_latest_response(self, response_type: str) -> dict[str, Any] | None:
+        row = self._connection.execute(
+            """
+            SELECT packet_json, content_sha256, receipt_json FROM response_packets
+            WHERE work_order_id = ? AND response_type = ?
+            ORDER BY created_at DESC
+            """,
+            (self._work_order_id, response_type),
+        ).fetchone()
+        if row is None:
+            return None
+        receipt = None
+        if row["receipt_json"]:
+            loaded = json.loads(row["receipt_json"])
+            receipt = loaded if isinstance(loaded, dict) else None
+        return {
+            "packet": json.loads(row["packet_json"]),
+            "content_sha256": row["content_sha256"],
+            "receipt": receipt,
+        }
+
     def put_decision(self, decision: dict[str, Any]) -> None:
         self._connection.execute(
             """
@@ -703,3 +817,130 @@ class _SQLiteWorkOrderSession:
             return None
         loaded = json.loads(row["snapshot_json"])
         return loaded if isinstance(loaded, dict) else None
+
+    def put_execution_dispatch(self, dispatch: dict[str, Any]) -> None:
+        self._connection.execute(
+            """
+            INSERT INTO execution_dispatches (
+                dispatch_id, work_order_id, attempt, plan_id, plan_sha256,
+                approval_decision_id, executor, repository_url, base_ref,
+                wrapper_id, wrapper_version, wrapper_sha256, provider_idempotency_key,
+                state, attempt_count, lease_owner, lease_expires_at, provider_agent_id,
+                provider_run_id, last_failure_code, wrapped_markdown, existing_agent_id,
+                receipt_json, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            _dispatch_row(dispatch, self._work_order_id),
+        )
+
+    def get_execution_dispatch(self, dispatch_id: str) -> dict[str, Any] | None:
+        row = self._connection.execute(
+            """
+            SELECT * FROM execution_dispatches
+            WHERE work_order_id = ? AND dispatch_id = ?
+            """,
+            (self._work_order_id, dispatch_id),
+        ).fetchone()
+        return None if row is None else _row_to_dispatch(row)
+
+    def list_execution_dispatches(self) -> list[dict[str, Any]]:
+        rows = self._connection.execute(
+            """
+            SELECT * FROM execution_dispatches
+            WHERE work_order_id = ? ORDER BY attempt
+            """,
+            (self._work_order_id,),
+        ).fetchall()
+        return [_row_to_dispatch(row) for row in rows]
+
+    def update_execution_dispatch(self, dispatch: dict[str, Any]) -> None:
+        self._connection.execute(
+            """
+            UPDATE execution_dispatches SET
+                state = ?, attempt_count = ?, lease_owner = ?, lease_expires_at = ?,
+                provider_agent_id = ?, provider_run_id = ?, last_failure_code = ?,
+                receipt_json = ?, updated_at = ?
+            WHERE work_order_id = ? AND dispatch_id = ?
+            """,
+            (
+                str(dispatch["state"]),
+                int(dispatch.get("attempt_count") or 0),
+                dispatch.get("lease_owner"),
+                dispatch.get("lease_expires_at"),
+                dispatch.get("provider_agent_id"),
+                dispatch.get("provider_run_id"),
+                dispatch.get("last_failure_code"),
+                json.dumps(dispatch.get("receipt"), sort_keys=True, separators=(",", ":"))
+                if dispatch.get("receipt") is not None
+                else None,
+                str(dispatch["updated_at"]),
+                self._work_order_id,
+                str(dispatch["dispatch_id"]),
+            ),
+        )
+
+
+def _dispatch_row(dispatch: dict[str, Any], work_order_id: str) -> tuple[object, ...]:
+    return (
+        str(dispatch["dispatch_id"]),
+        work_order_id,
+        int(dispatch["attempt"]),
+        str(dispatch["plan_id"]),
+        str(dispatch["plan_sha256"]),
+        str(dispatch["approval_decision_id"]),
+        str(dispatch["executor"]),
+        str(dispatch["repository_url"]),
+        str(dispatch["base_ref"]),
+        str(dispatch["wrapper_id"]),
+        str(dispatch["wrapper_version"]),
+        str(dispatch["wrapper_sha256"]),
+        str(dispatch["provider_idempotency_key"]),
+        str(dispatch["state"]),
+        int(dispatch.get("attempt_count") or 0),
+        dispatch.get("lease_owner"),
+        dispatch.get("lease_expires_at"),
+        dispatch.get("provider_agent_id"),
+        dispatch.get("provider_run_id"),
+        dispatch.get("last_failure_code"),
+        str(dispatch["wrapped_markdown"]),
+        dispatch.get("existing_agent_id"),
+        json.dumps(dispatch.get("receipt"), sort_keys=True, separators=(",", ":"))
+        if dispatch.get("receipt") is not None
+        else None,
+        str(dispatch["created_at"]),
+        str(dispatch["updated_at"]),
+    )
+
+
+def _row_to_dispatch(row: sqlite3.Row) -> dict[str, Any]:
+    receipt = None
+    if row["receipt_json"]:
+        loaded = json.loads(row["receipt_json"])
+        receipt = loaded if isinstance(loaded, dict) else None
+    return {
+        "dispatch_id": row["dispatch_id"],
+        "work_order_id": row["work_order_id"],
+        "attempt": int(row["attempt"]),
+        "plan_id": row["plan_id"],
+        "plan_sha256": row["plan_sha256"],
+        "approval_decision_id": row["approval_decision_id"],
+        "executor": row["executor"],
+        "repository_url": row["repository_url"],
+        "base_ref": row["base_ref"],
+        "wrapper_id": row["wrapper_id"],
+        "wrapper_version": row["wrapper_version"],
+        "wrapper_sha256": row["wrapper_sha256"],
+        "provider_idempotency_key": row["provider_idempotency_key"],
+        "state": row["state"],
+        "attempt_count": int(row["attempt_count"]),
+        "lease_owner": row["lease_owner"],
+        "lease_expires_at": row["lease_expires_at"],
+        "provider_agent_id": row["provider_agent_id"],
+        "provider_run_id": row["provider_run_id"],
+        "last_failure_code": row["last_failure_code"],
+        "wrapped_markdown": row["wrapped_markdown"],
+        "existing_agent_id": row["existing_agent_id"],
+        "receipt": receipt,
+        "created_at": row["created_at"],
+        "updated_at": row["updated_at"],
+    }

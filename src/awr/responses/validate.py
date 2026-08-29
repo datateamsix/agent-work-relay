@@ -221,7 +221,16 @@ def _validate_payload(response_type: ResponseType, payload: dict[str, Any]) -> d
             return _object(
                 payload,
                 required=("summary",),
-                optional=("content_sha256",),
+                optional=(
+                    "content_sha256",
+                    "repository",
+                    "branch",
+                    "base_ref",
+                    "commit_sha",
+                    "pull_request_url",
+                    "limitations",
+                    "blockers",
+                ),
                 body_fields=("summary",),
             )
         case ResponseType.EXECUTION_FAILED:

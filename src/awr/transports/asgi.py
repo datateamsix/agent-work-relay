@@ -116,6 +116,14 @@ def create_app(
             return no_store_json({"error": str(exc)}, status_code=400)
         return no_store_json(result.to_dict())
 
+    async def refresh_external(request: Request) -> Response:
+        work_order_id = request.path_params["work_order_id"]
+        try:
+            result = broker.refresh_external_run(work_order_id)
+        except WorkOrderValidationError as exc:
+            return no_store_json({"error": str(exc)}, status_code=400)
+        return no_store_json(result)
+
     async def get_plan(request: Request) -> Response:
         work_order_id = request.path_params["work_order_id"]
         try:
@@ -221,6 +229,11 @@ def create_app(
             Route("/.well-known/oauth-protected-resource/mcp", protected_resource),
             Route("/v1/planning", submit_planning, methods=["POST"]),
             Route("/v1/planning/{work_order_id}/refresh", refresh_planning, methods=["POST"]),
+            Route(
+                "/v1/work-orders/{work_order_id}/refresh-external",
+                refresh_external,
+                methods=["POST"],
+            ),
             Route("/v1/planning/{work_order_id}/plan", get_plan, methods=["GET"]),
             Route("/v1/planning/{work_order_id}/timeline", get_timeline, methods=["GET"]),
             Route(

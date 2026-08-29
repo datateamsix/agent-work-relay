@@ -38,6 +38,13 @@ def create_app(service: BrokerService) -> Any:
     def refresh_planning(work_order_id: str) -> dict[str, Any]:
         return service.refresh_planning(work_order_id).to_dict()
 
+    @app.post("/v1/work-orders/{work_order_id}/refresh-external")
+    def refresh_external(work_order_id: str) -> Any:
+        try:
+            return service.refresh_external_run(work_order_id)
+        except WorkOrderValidationError as exc:
+            return JSONResponse({"error": str(exc)}, status_code=400)
+
     @app.get("/v1/planning/{work_order_id}/plan")
     def get_plan(work_order_id: str) -> dict[str, Any]:
         return service.get_plan(work_order_id).to_dict()

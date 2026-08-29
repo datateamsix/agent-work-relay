@@ -78,7 +78,14 @@ class HostedHttpTests(unittest.TestCase):
         self.assertEqual(body["resource"], "http://testserver/mcp")
         self.assertEqual(
             body["scopes_supported"],
-            ["awr:plan", "awr:read", "awr:refresh", "awr:response", "awr:decide"],
+            [
+                "awr:plan",
+                "awr:read",
+                "awr:refresh",
+                "awr:response",
+                "awr:decide",
+                "awr:execute",
+            ],
         )
         self.assertEqual(body["bearer_methods_supported"], ["header"])
 
@@ -109,6 +116,7 @@ class HostedHttpTests(unittest.TestCase):
                 "get_work_order_timeline",
                 "list_pending_actions",
                 "record_decision",
+                "refresh_external_run",
                 "refresh_planning",
                 "submit_prompt_for_planning",
                 "submit_response",
@@ -268,6 +276,48 @@ class JwtHttpTests(unittest.TestCase):
         self.assertIn("insufficient_scope", response.headers["www-authenticate"])
         self.assertIn("awr:plan", response.headers["www-authenticate"])
 
+    def test_read_scope_cannot_refresh_external_run(self) -> None:
+        token = signed_token(self.private_key, scope="awr:read")
+        response = self.client.post(
+            "/mcp",
+            json=_mcp(
+                "tools/call",
+                {
+                    "name": "refresh_external_run",
+                    "arguments": {"work_order_id": "AWR-00000000-0000-0000-0000-000000000001"},
+                },
+            ),
+            headers=_auth_header(token),
+        )
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.json()["error"], "insufficient_scope")
+        self.assertIn("awr:execute", response.headers["www-authenticate"])
+
+    def test_execute_scope_cannot_record_decision(self) -> None:
+        token = signed_token(self.private_key, scope="awr:execute")
+        response = self.client.post(
+            "/mcp",
+            json=_mcp(
+                "tools/call",
+                {
+                    "name": "record_decision",
+                    "arguments": {
+                        "decision_type": "approve_plan",
+                        "work_order_id": "AWR-00000000-0000-0000-0000-000000000001",
+                        "target_id": "PLAN-1",
+                        "target_sha256": "a" * 64,
+                        "idempotency_key": "nope",
+                        "permitted_action": "plan.execute",
+                        "rationale": "Must not mint approval.",
+                    },
+                },
+            ),
+            headers=_auth_header(token),
+        )
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.json()["error"], "insufficient_scope")
+        self.assertIn("awr:decide", response.headers["www-authenticate"])
+
 
 @unittest.skipUnless(TestClient is not None, "hosted extra is required")
 class HttpCacheTests(unittest.TestCase):
@@ -320,6 +370,12 @@ class HttpCacheTests(unittest.TestCase):
         self.assertEqual(cached.status_code, 304)
         self.assertEqual(cached.headers["etag"], etag)
         self.assertEqual(cached.headers["cache-control"], "private, no-cache")
+
+        refresh = self.client.post(
+            "/v1/work-orders/AWR-00000000-0000-0000-0000-000000000099/refresh-external",
+            headers=_auth_header(),
+        )
+        self.assertEqual(refresh.headers["cache-control"], "no-store")
 
 
 if __name__ == "__main__":

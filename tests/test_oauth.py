@@ -76,7 +76,16 @@ class StaticTokenTests(unittest.TestCase):
         principal = TokenVerifier(settings).verify("local-dev-token")
         self.assertEqual(
             principal.scopes,
-            frozenset({"awr:plan", "awr:read", "awr:refresh", "awr:response", "awr:decide"}),
+            frozenset(
+                {
+                    "awr:plan",
+                    "awr:read",
+                    "awr:refresh",
+                    "awr:response",
+                    "awr:decide",
+                    "awr:execute",
+                }
+            ),
         )
 
 

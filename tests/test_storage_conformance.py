@@ -229,6 +229,76 @@ class StorageConformanceMixin:
         with self.store.lock_work_order(work_order.work_order_id) as session:  # type: ignore[attr-defined]
             self.assertIsNone(session.get_lifecycle())
 
+    def test_execution_dispatch_write_rollback_and_cas(self) -> None:
+        candidate = _accepted_work_order(
+            "AWR-44444444-4444-4444-4444-444444444444", "idem-dispatch"
+        )
+        work_order, _, _ = self.store.create_work_order(candidate)  # type: ignore[attr-defined]
+        now = datetime.now(UTC).isoformat()
+        dispatch = {
+            "dispatch_id": "EXD-conformance-1",
+            "work_order_id": work_order.work_order_id,
+            "attempt": 1,
+            "plan_id": "PLAN-1",
+            "plan_sha256": "c" * 64,
+            "approval_decision_id": "DEC-1",
+            "executor": "cursor:recording",
+            "repository_url": REPOSITORY,
+            "base_ref": "main",
+            "wrapper_id": "plan.execute",
+            "wrapper_version": "1.0.0",
+            "wrapper_sha256": "d" * 64,
+            "provider_idempotency_key": "provider-key-1",
+            "state": "PENDING",
+            "attempt_count": 0,
+            "wrapped_markdown": "# Execute",
+            "created_at": now,
+            "updated_at": now,
+        }
+        try:
+            with self.store.lock_work_order(work_order.work_order_id) as session:  # type: ignore[attr-defined]
+                session.put_execution_dispatch(dispatch)
+                raise RuntimeError("boom")
+        except RuntimeError:
+            pass
+        self.assertIsNone(self.store.get_execution_dispatch("EXD-conformance-1"))  # type: ignore[attr-defined]
+
+        with self.store.lock_work_order(work_order.work_order_id) as session:  # type: ignore[attr-defined]
+            session.put_execution_dispatch(dispatch)
+            session.append_ledger("plan.execute", work_order.sender, "broker:awr", {"attempt": 1})
+            session.append_ledger("plan.execute", work_order.sender, "broker:awr", {"attempt": 2})
+            session.append_ledger(
+                "execution.progress", work_order.recipient, "broker:awr", {"n": 1}
+            )
+            session.append_ledger(
+                "execution.progress", work_order.recipient, "broker:awr", {"n": 2}
+            )
+        stored = self.store.get_execution_dispatch("EXD-conformance-1")  # type: ignore[attr-defined]
+        assert stored is not None
+        events = [entry.event_type for entry in self.store.list_ledger(work_order.work_order_id)]  # type: ignore[attr-defined]
+        self.assertEqual(events.count("plan.execute"), 2)
+        self.assertEqual(events.count("execution.progress"), 2)
+
+        first = self.store.claim_execution_lease(  # type: ignore[attr-defined]
+            "EXD-conformance-1", owner="worker-a", now=now, ttl_seconds=30
+        )
+        second = self.store.claim_execution_lease(  # type: ignore[attr-defined]
+            "EXD-conformance-1",
+            owner="worker-b",
+            now=now,
+            ttl_seconds=30,
+        )
+        self.assertIsNotNone(first)
+        self.assertIsNone(second)
+        expired = self.store.claim_execution_lease(  # type: ignore[attr-defined]
+            "EXD-conformance-1",
+            owner="worker-b",
+            now=(datetime.now(UTC).replace(year=2099)).isoformat(),
+            ttl_seconds=30,
+        )
+        self.assertIsNotNone(expired)
+        self.assertEqual(expired["lease_owner"], "worker-b")
+
 
 class SQLiteConformanceTests(StorageConformanceMixin, unittest.TestCase):
     def setUp(self) -> None:

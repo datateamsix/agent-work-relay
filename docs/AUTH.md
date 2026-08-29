@@ -43,7 +43,8 @@ Minimum Auth0 operator setup:
 1. Create a dedicated Auth0 tenant or application that is not the PreM3 app.
 2. Create an API whose identifier is the AWR MCP resource URL,
    for example `https://agent-work-relay-xxxxx.run.app/mcp`.
-3. Enable RBAC and add scopes `awr:plan`, `awr:read`, and `awr:refresh`.
+3. Enable RBAC and add scopes `awr:plan`, `awr:read`, `awr:refresh`,
+   `awr:response`, `awr:decide`, and `awr:execute`.
 4. Create a ChatGPT connector client:
    - prefer CIMD if the tenant supports `client_id_metadata_document_supported`;
    - otherwise enable DCR or register the ChatGPT redirect URI as a predefined

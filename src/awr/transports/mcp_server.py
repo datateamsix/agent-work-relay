@@ -15,9 +15,10 @@ def create_server(service: BrokerService | None = None) -> Any:
     server = MCPServer(
         "Agent Work Relay",
         instructions=(
-            "Submit decorated Markdown work orders for plan-only Cursor runs. "
-            "Use begin_artifact_intake plus PUT /v1/artifacts/{id}/content for binaries. "
-            "Do not request execution."
+            "Submit decorated Markdown work orders for Cursor planning and approved "
+            "execution. Use begin_artifact_intake plus PUT /v1/artifacts/{id}/content "
+            "for binaries. refresh_external_run requires awr:execute and a stored "
+            "approve_plan decision. Responses never grant authority."
         ),
     )
     broker = service or build_service()
@@ -54,6 +55,18 @@ def create_server(service: BrokerService | None = None) -> Any:
     )
     def refresh_planning(work_order_id: str) -> dict[str, Any]:
         return broker.refresh_planning(work_order_id).to_dict()
+
+    @server.tool(
+        name="refresh_external_run",
+        title="Refresh external run",
+        description=(
+            "Advance an approved execution dispatch, reconcile an active Cursor run, "
+            "or return the original terminal receipt. Requires awr:execute."
+        ),
+        meta=_security_meta("awr:execute"),
+    )
+    def refresh_external_run(work_order_id: str) -> dict[str, Any]:
+        return broker.refresh_external_run(work_order_id)
 
     @server.tool(
         name="get_plan",

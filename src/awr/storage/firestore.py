@@ -6,7 +6,7 @@ from collections import defaultdict
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import replace
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import uuid4
 
@@ -16,6 +16,7 @@ from .base import WorkOrderSession
 WORK_ORDERS = "awr_work_orders"
 IDEMPOTENCY = "awr_idempotency"
 LEDGER = "ledger"
+DISPATCHES = "awr_execution_dispatches"
 
 
 def _idempotency_id(key: str) -> str:
@@ -227,6 +228,77 @@ class FirestoreStateStore:
             yield session
             session.commit()
 
+    def get_execution_dispatch(self, dispatch_id: str) -> dict[str, Any] | None:
+        snapshot = self._client.collection(DISPATCHES).document(dispatch_id).get()
+        if not snapshot.exists:
+            return None
+        data = snapshot.to_dict() or {}
+        return data if isinstance(data, dict) else None
+
+    def list_execution_dispatches(self, work_order_id: str) -> list[dict[str, Any]]:
+        items: list[dict[str, Any]] = []
+        for snapshot in (
+            self._work_order_ref(work_order_id).collection("execution_dispatches").stream()
+        ):
+            data = snapshot.to_dict() or {}
+            if isinstance(data, dict):
+                items.append(data)
+        items.sort(key=lambda item: int(item.get("attempt") or 0))
+        return items
+
+    def claim_execution_lease(
+        self,
+        dispatch_id: str,
+        *,
+        owner: str,
+        now: str,
+        ttl_seconds: float,
+    ) -> dict[str, Any] | None:
+        expires = (datetime.fromisoformat(now) + timedelta(seconds=ttl_seconds)).isoformat()
+        result: dict[str, Any] | None = None
+
+        def txn(transaction: Any) -> None:
+            nonlocal result
+            ref = self._client.collection(DISPATCHES).document(dispatch_id)
+            snapshot = _snapshot(ref, transaction)
+            if not snapshot.exists:
+                result = None
+                return
+            current = snapshot.to_dict() or {}
+            if current.get("state") in {"ACKNOWLEDGED", "FAILED"}:
+                result = current
+                return
+            lease_expires = current.get("lease_expires_at")
+            if (
+                current.get("state") == "LEASED"
+                and isinstance(lease_expires, str)
+                and lease_expires > now
+                and current.get("lease_owner") != owner
+            ):
+                result = None
+                return
+            updated = {
+                **current,
+                "state": "LEASED",
+                "lease_owner": owner,
+                "lease_expires_at": expires,
+                "attempt_count": int(current.get("attempt_count") or 0) + 1,
+                "updated_at": now,
+            }
+            transaction.set(ref, updated)
+            work_order_id = str(current.get("work_order_id") or "")
+            if work_order_id:
+                transaction.set(
+                    self._work_order_ref(work_order_id)
+                    .collection("execution_dispatches")
+                    .document(dispatch_id),
+                    updated,
+                )
+            result = updated
+
+        self._run_transaction(txn)
+        return result
+
 
 class _FirestoreWorkOrderSession:
     def __init__(
@@ -244,14 +316,21 @@ class _FirestoreWorkOrderSession:
         self._pending_packets: list[dict[str, Any]] = []
         self._pending_decisions: list[dict[str, Any]] = []
         self._pending_lifecycle: dict[str, Any] | None = None
+        self._pending_dispatches: list[dict[str, Any]] = []
         self._lifecycle: dict[str, Any] | None = self._load_lifecycle()
         self._decisions: list[dict[str, Any]] = self._load_decisions()
+        self._dispatches: list[dict[str, Any]] = self._load_dispatches()
 
     def _responses_collection(self) -> Any:
         return self._store._work_order_ref(self._work_order.work_order_id).collection("responses")
 
     def _decisions_collection(self) -> Any:
         return self._store._work_order_ref(self._work_order.work_order_id).collection("decisions")
+
+    def _dispatches_collection(self) -> Any:
+        return self._store._work_order_ref(self._work_order.work_order_id).collection(
+            "execution_dispatches"
+        )
 
     def _lifecycle_ref(self) -> Any:
         return (
@@ -269,6 +348,10 @@ class _FirestoreWorkOrderSession:
 
     def _load_decisions(self) -> list[dict[str, Any]]:
         return [item.to_dict() or {} for item in self._decisions_collection().stream()]
+
+    def _load_dispatches(self) -> list[dict[str, Any]]:
+        items = [item.to_dict() or {} for item in self._dispatches_collection().stream()]
+        return [item for item in items if isinstance(item, dict)]
 
     def get_work_order(self) -> WorkOrder:
         return self._work_order
@@ -335,6 +418,29 @@ class _FirestoreWorkOrderSession:
                     }
         return None
 
+    def get_latest_response(self, response_type: str) -> dict[str, Any] | None:
+        matches: list[dict[str, Any]] = []
+        for item in self._pending_packets:
+            if item.get("response_type") == response_type:
+                matches.append(item)
+        if not matches:
+            for snapshot in self._responses_collection().stream():
+                data = snapshot.to_dict() or {}
+                if data.get("response_type") == response_type:
+                    matches.append(data)
+        if not matches:
+            return None
+        latest = matches[-1]
+        packet = latest.get("packet")
+        if not isinstance(packet, dict):
+            return None
+        receipt = latest.get("receipt")
+        return {
+            "packet": packet,
+            "content_sha256": str(latest.get("content_sha256") or ""),
+            "receipt": receipt if isinstance(receipt, dict) else None,
+        }
+
     def put_decision(self, decision: dict[str, Any]) -> None:
         self._pending_decisions.append(decision)
         self._decisions.append(decision)
@@ -349,12 +455,36 @@ class _FirestoreWorkOrderSession:
     def get_lifecycle(self) -> dict[str, Any] | None:
         return None if self._lifecycle is None else dict(self._lifecycle)
 
+    def put_execution_dispatch(self, dispatch: dict[str, Any]) -> None:
+        self._pending_dispatches.append(dispatch)
+        self._dispatches.append(dispatch)
+
+    def get_execution_dispatch(self, dispatch_id: str) -> dict[str, Any] | None:
+        for item in reversed(self._dispatches):
+            if item.get("dispatch_id") == dispatch_id:
+                return dict(item)
+        return None
+
+    def list_execution_dispatches(self) -> list[dict[str, Any]]:
+        return [dict(item) for item in self._dispatches]
+
+    def update_execution_dispatch(self, dispatch: dict[str, Any]) -> None:
+        self._pending_dispatches.append(dispatch)
+        self._dispatches = [
+            dispatch if item.get("dispatch_id") == dispatch.get("dispatch_id") else item
+            for item in self._dispatches
+        ]
+        dispatch_id = dispatch.get("dispatch_id")
+        if not any(item.get("dispatch_id") == dispatch_id for item in self._dispatches):
+            self._dispatches.append(dispatch)
+
     def commit(self) -> None:
         if (
             self._pending_status is None
             and not self._pending_entries
             and not self._pending_packets
             and not self._pending_decisions
+            and not self._pending_dispatches
             and self._pending_lifecycle is None
         ):
             return
@@ -379,6 +509,10 @@ class _FirestoreWorkOrderSession:
                 str(item.id)
                 for item in self._decisions_collection().stream(transaction=transaction)
             }
+            existing_dispatch_ids = {
+                str(item.id)
+                for item in self._dispatches_collection().stream(transaction=transaction)
+            }
             if current_sequence != self._base_sequence:
                 remaining_events = [
                     entry
@@ -395,10 +529,16 @@ class _FirestoreWorkOrderSession:
                     for decision in self._pending_decisions
                     if str(decision["decision_id"]) not in existing_decision_ids
                 ]
+                remaining_dispatches = [
+                    dispatch
+                    for dispatch in self._pending_dispatches
+                    if str(dispatch["dispatch_id"]) not in existing_dispatch_ids
+                ]
                 if (
                     not remaining_events
                     and not remaining_packets
                     and not remaining_decisions
+                    and not remaining_dispatches
                     and (
                         self._pending_status is None
                         or snapshot.get("status")
@@ -434,6 +574,17 @@ class _FirestoreWorkOrderSession:
                 transaction.set(
                     self._decisions_collection().document(str(decision["decision_id"])),
                     decision,
+                )
+            for dispatch in self._pending_dispatches:
+                transaction.set(
+                    self._dispatches_collection().document(str(dispatch["dispatch_id"])),
+                    dispatch,
+                )
+                transaction.set(
+                    self._store._client.collection(DISPATCHES).document(
+                        str(dispatch["dispatch_id"])
+                    ),
+                    dispatch,
                 )
             if self._pending_lifecycle is not None:
                 transaction.set(self._lifecycle_ref(), self._pending_lifecycle)
