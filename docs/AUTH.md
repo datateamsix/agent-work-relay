@@ -68,3 +68,6 @@ Do not invent a self-hosted identity provider inside AWR.
 
 `AWR_AUTH_MODE=static` exists only for local tests and recording demos. The
 production profile refuses to start if a static token is configured.
+
+Hosted MCP hardening, rate limits, security headers, and the incident
+runbook are in [MCP_SECURITY.md](MCP_SECURITY.md).

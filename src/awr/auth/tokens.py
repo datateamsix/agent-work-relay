@@ -85,6 +85,9 @@ class TokenVerifier:
             header = jwt.get_unverified_header(token)
         except jwt.PyJWTError as exc:
             raise AuthError(401, "invalid_token", "The access token is malformed.") from exc
+        algorithm = header.get("alg")
+        if algorithm != "RS256":
+            raise AuthError(401, "invalid_token", "The access token signing algorithm is invalid.")
         key = self._signing_key(token, header)
         issuer = self.settings.oauth_issuer
         audience = self.settings.oauth_audience

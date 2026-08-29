@@ -12,6 +12,7 @@ from starlette.responses import HTMLResponse, JSONResponse, Response
 from starlette.routing import Mount, Route
 
 from ..artifacts.errors import ArtifactError, ArtifactTicketError
+from ..auth.hardening import SecurityHeadersMiddleware
 from ..auth.middleware import OAuthResourceMiddleware
 from ..auth.tokens import TokenVerifier
 from ..factory import build_service
@@ -249,6 +250,7 @@ def create_app(
             Mount("/", mcp_app),
         ],
         middleware=[
+            Middleware(SecurityHeadersMiddleware, settings=resolved),
             Middleware(OAuthResourceMiddleware, settings=resolved, verifier=verifier),
         ],
         lifespan=lifespan,

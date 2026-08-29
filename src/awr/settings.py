@@ -89,6 +89,12 @@ class Settings:
     bundle_max_artifacts: int = 10
     bundle_max_bytes: int = 25 * 1024 * 1024
     upload_ticket_ttl_seconds: int = 900
+    json_body_max_bytes: int = 768 * 1024
+    rate_limit_window_seconds: int = 60
+    rate_limit_anonymous_per_minute: int = 30
+    rate_limit_authenticated_per_minute: int = 120
+    rate_limit_plan_per_minute: int = 20
+    rate_limit_execute_per_minute: int = 10
 
     extra_jwks: dict[str, object] = field(default_factory=dict, compare=False)
 
@@ -197,6 +203,12 @@ class Settings:
             bundle_max_artifacts=_int_env("AWR_BUNDLE_MAX_ARTIFACTS", 10),
             bundle_max_bytes=_int_env("AWR_BUNDLE_MAX_BYTES", 25 * 1024 * 1024),
             upload_ticket_ttl_seconds=_int_env("AWR_UPLOAD_TICKET_TTL", 900),
+            json_body_max_bytes=_int_env("AWR_JSON_BODY_MAX_BYTES", 768 * 1024),
+            rate_limit_window_seconds=_int_env("AWR_RATE_LIMIT_WINDOW", 60),
+            rate_limit_anonymous_per_minute=_int_env("AWR_RATE_LIMIT_ANON", 30),
+            rate_limit_authenticated_per_minute=_int_env("AWR_RATE_LIMIT_AUTH", 120),
+            rate_limit_plan_per_minute=_int_env("AWR_RATE_LIMIT_PLAN", 20),
+            rate_limit_execute_per_minute=_int_env("AWR_RATE_LIMIT_EXECUTE", 10),
         )
         settings.validate()
         return settings

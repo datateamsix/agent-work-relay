@@ -282,5 +282,6 @@ not delivered to Cursor in this slice. GCS delivery is AWR-AS-04.
 - Executor side effects are protected by idempotency keys.
 - Unknown directives fail closed.
 
-See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and
-[docs/AWR-GT-001.md](docs/AWR-GT-001.md).
+See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md),
+[docs/AWR-GT-001.md](docs/AWR-GT-001.md), and
+[docs/MCP_SECURITY.md](docs/MCP_SECURITY.md).

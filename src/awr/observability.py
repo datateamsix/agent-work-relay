@@ -16,6 +16,9 @@ _SECRET_KEYS = {
     "password",
     "secret",
     "client_secret",
+    "upload_token",
+    "x-awr-upload-token",
+    "signed_url",
 }
 _REDACT_PATTERN = re.compile(
     r"(authorization|bearer|api[_-]?key|cursor_api_key|secret|token)\s*[:=]\s*\S+",

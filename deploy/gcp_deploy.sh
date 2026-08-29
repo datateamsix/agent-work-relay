@@ -37,6 +37,10 @@ if [[ -n "${ALLOWED_HOSTS}" ]]; then
   ENV_VARS="${ENV_VARS},AWR_ALLOWED_HOSTS=${ALLOWED_HOSTS}"
 fi
 
+# Network reachability is public so ChatGPT can complete OAuth and call /mcp.
+# Application authentication is still required: /mcp and state-bearing routes
+# reject missing, invalid, expired, wrong-issuer, and insufficient-scope tokens.
+# Do not treat --allow-unauthenticated as an unauthenticated MCP server.
 gcloud run deploy "${SERVICE}" \
   --source "${ROOT}" \
   --region "${REGION}" \

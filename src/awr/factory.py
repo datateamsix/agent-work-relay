@@ -41,7 +41,11 @@ def build_artifact_relay(
     artifact_root: str | Path | None = None,
     max_bytes: int | None = None,
     scanner: SecurityScanner | None = None,
-) -> ArtifactRelay:
+) -> ArtifactRelay | None:
+    env = (os.getenv("AWR_ENV", "local") or "local").lower()
+    backend = (os.getenv("AWR_ARTIFACT_STORAGE", "local") or "local").lower()
+    if env == "production" and backend != "gcs":
+        return None
     sqlite_path = Path(
         db_path if db_path is not None else os.getenv("AWR_SQLITE_PATH", ".awr/awr.db")
     )
