@@ -4,7 +4,7 @@
 # command for composite indexes.
 set -euo pipefail
 
-PROJECT_ID="${PROJECT_ID:-modelready-m3}"
+: "${PROJECT_ID:?Set PROJECT_ID to the AWR GCP project.}"
 DATABASE="${FIRESTORE_DATABASE:-(default)}"
 
 already_exists() {

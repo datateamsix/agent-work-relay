@@ -140,20 +140,20 @@ Supabase, or a dashboard during this slice.
 
 ## Target GCP deployment
 
-AWR will use the existing PreM3 GCP project while remaining operationally
-isolated from the PreM3 application.
+AWR uses a dedicated, billing-enabled GCP project selected explicitly by the
+operator. It does not share the PreM3 project or application boundary.
 
 | Setting | Target |
 |---|---|
-| GCP project | `modelready-m3` |
-| Project number | `912257136465` |
+| GCP project | Operator-selected dedicated AWR project (`PROJECT_ID`) |
+| Project number | Resolved from `PROJECT_ID` during provisioning |
 | Region | `us-central1` |
 | Cloud Run service | `agent-work-relay` |
 | MCP endpoint | `https://<cloud-run-host>/mcp` |
 | Health endpoint | `https://<cloud-run-host>/healthz` |
-| State store | Existing Firestore `(default)` database, Native mode |
+| State store | Dedicated Firestore `(default)` database, Native mode |
 | Executor | Cursor Cloud Agents API v1 |
-| Runtime identity | `awr-runtime@modelready-m3.iam.gserviceaccount.com` |
+| Runtime identity | `awr-runtime@${PROJECT_ID}.iam.gserviceaccount.com` |
 | Cursor secret | `awr-cursor-api-key` |
 | MCP authentication | OAuth 2.1 resource server with configurable issuer |
 
@@ -291,8 +291,8 @@ Grant `awr-runtime` only:
   explicitly required by the approved OAuth design; and
 - normal Cloud Run logging permissions.
 
-Do not grant Vertex AI, BigQuery, or Cloud Storage roles merely because the
-service shares the PreM3 project.
+Do not grant Vertex AI, BigQuery, or Cloud Storage roles. The AWR project and
+runtime identity have no PreM3 resource authority.
 
 ## Required deliverables
 
@@ -322,8 +322,8 @@ The build is complete only when all of the following are true:
 3. `/mcp` rejects missing, invalid, expired, wrong-issuer, wrong-audience, and
    insufficient-scope tokens with the correct OAuth challenge.
 4. An authenticated MCP client discovers exactly the four prototype tools.
-5. The service deploys to `modelready-m3` in `us-central1` under
-   `awr-runtime`.
+5. The service deploys to the explicit dedicated AWR `PROJECT_ID` in
+   `us-central1` under `awr-runtime`.
 6. No Cursor or MCP secret appears in Git, Cloud Run configuration output,
    application logs, Firestore, receipts, or exception bodies.
 7. ChatGPT completes OAuth linking and submits `examples/AWR-GT-001.md`
@@ -382,13 +382,14 @@ Read before planning:
 - docs/CURSOR_PRODUCT_SUMMARY_AND_CLOUD_RUN_BUILD.md
 
 GCP target:
-- project: modelready-m3
-- project number: 912257136465
+- project: explicit dedicated AWR `PROJECT_ID`
+- project number: resolve from `PROJECT_ID`; never hard-code it
 - region: us-central1
 - Cloud Run service: agent-work-relay
 - runtime service account:
-  awr-runtime@modelready-m3.iam.gserviceaccount.com
-- Firestore: existing (default) Native-mode database
+  awr-runtime@${PROJECT_ID}.iam.gserviceaccount.com
+- Firestore: create or verify the (default) Native-mode database with delete
+  protection
 - Cursor secret: awr-cursor-api-key
 - MCP authentication: OAuth 2.1 resource server with configurable issuer
 

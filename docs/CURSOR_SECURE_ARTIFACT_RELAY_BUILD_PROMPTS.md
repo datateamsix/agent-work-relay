@@ -424,11 +424,11 @@ Repository:
 https://github.com/datateamsix/agent-work-relay
 
 GCP target:
-- project: modelready-m3
+- project: explicit dedicated AWR `PROJECT_ID`
 - region: us-central1
 - broker service: agent-work-relay
-- broker identity: awr-runtime@modelready-m3.iam.gserviceaccount.com
-- state: existing Firestore (default) database using dedicated awr_ collections
+- broker identity: awr-runtime@${PROJECT_ID}.iam.gserviceaccount.com
+- state: dedicated Firestore (default) database using awr_ collections
 
 Read before planning:
 - AGENTS.md

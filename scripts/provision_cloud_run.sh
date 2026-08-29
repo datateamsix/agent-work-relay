@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Provision the Agent Work Relay Cloud Run MCP server in modelready-m3.
+# Provision the Agent Work Relay Cloud Run MCP server in an operator-selected
+# GCP project.
 #
 # This is the operator path. It installs the Google Cloud SDK if needed,
 # opens a browser for gcloud login, creates the isolated AWR identity, stores
@@ -11,9 +12,11 @@
 # exists, finish the authorization-server steps in docs/AUTH.md.
 #
 # Usage:
-#   ./scripts/provision_cloud_run.sh
+#   PROJECT_ID=your-awr-project \
+#   AWR_REPOSITORY_URL=https://github.com/your-org/your-repo \
 #   ./scripts/provision_cloud_run.sh --issuer https://your-tenant.auth0.com/
-#   AWR_OAUTH_ISSUER=https://your-tenant.auth0.com/ ./scripts/provision_cloud_run.sh --yes
+#
+# In Google Cloud Shell, add --skip-auth to reuse the active gcloud identity.
 #
 # The Cursor API key is read from the terminal or CURSOR_API_KEY_FILE.
 # It is never printed.
@@ -21,12 +24,14 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-PROJECT_ID="${PROJECT_ID:-modelready-m3}"
+PROJECT_ID="${PROJECT_ID:-}"
 REGION="${REGION:-us-central1}"
+FIRESTORE_DATABASE="${FIRESTORE_DATABASE:-(default)}"
+FIRESTORE_LOCATION="${FIRESTORE_LOCATION:-${REGION}}"
 SERVICE="${SERVICE:-agent-work-relay}"
 RUNTIME_SA="${RUNTIME_SA:-awr-runtime@${PROJECT_ID}.iam.gserviceaccount.com}"
 CURSOR_SECRET="${CURSOR_SECRET:-awr-cursor-api-key}"
-REPOSITORY_URL="${AWR_REPOSITORY_URL:-https://github.com/datateamsix/engineering-work-broker}"
+REPOSITORY_URL="${AWR_REPOSITORY_URL:-}"
 BASE_REF="${AWR_BASE_REF:-main}"
 ISSUER="${AWR_OAUTH_ISSUER:-}"
 JWKS_URL="${AWR_OAUTH_JWKS_URL:-}"
@@ -38,7 +43,11 @@ NO_LAUNCH_BROWSER=0
 
 usage() {
   cat <<'EOF'
-Provision Agent Work Relay on Cloud Run (modelready-m3 / us-central1).
+Provision Agent Work Relay on Cloud Run.
+
+Required environment:
+  PROJECT_ID              Existing, billing-enabled GCP project
+  AWR_REPOSITORY_URL      HTTPS GitHub repository Cursor will work against
 
 Options:
   --issuer URL            Auth0/WorkOS issuer, e.g. https://tenant.auth0.com/
@@ -51,8 +60,9 @@ Options:
   -h, --help              Show this help
 
 Environment:
-  PROJECT_ID, REGION, AWR_REPOSITORY_URL, AWR_BASE_REF, AWR_OAUTH_ISSUER,
-  AWR_OAUTH_JWKS_URL, CURSOR_API_KEY_FILE
+  PROJECT_ID, REGION, FIRESTORE_DATABASE, FIRESTORE_LOCATION,
+  AWR_REPOSITORY_URL, AWR_BASE_REF, AWR_OAUTH_ISSUER, AWR_OAUTH_JWKS_URL,
+  CURSOR_API_KEY_FILE
 EOF
 }
 
@@ -123,6 +133,13 @@ host_from_url() {
   printf '%s\n' "${url%%/*}"
 }
 
+validate_operator_config() {
+  [[ -n "${PROJECT_ID}" ]] || die "Set PROJECT_ID to an existing, billing-enabled AWR GCP project."
+  [[ -n "${REPOSITORY_URL}" ]] || die "Set AWR_REPOSITORY_URL to the GitHub repository Cursor will work against."
+  require_https_url "${REPOSITORY_URL}" "AWR_REPOSITORY_URL"
+  [[ "${REPOSITORY_URL}" == https://github.com/* ]] || die "AWR_REPOSITORY_URL must be an https://github.com/ URL."
+}
+
 ensure_gcloud() {
   if command -v gcloud >/dev/null 2>&1; then
     log "gcloud is already on PATH: $(command -v gcloud)"
@@ -171,7 +188,7 @@ authenticate() {
       login_flags+=(--no-launch-browser)
       log "Opening a device-code login. Complete it in a browser, then return here."
     else
-      log "Opening a browser for Google Cloud login. Use a modelready-m3 owner or editor."
+      log "Opening a browser for Google Cloud login. Use an owner or editor of ${PROJECT_ID}."
     fi
     gcloud auth login "${login_flags[@]}"
   fi
@@ -259,7 +276,12 @@ deploy_revision() {
   local audience="$2"
   local allowed_hosts="$3"
   log "Deploying ${SERVICE} (source build). This can take several minutes."
-  AWR_PUBLIC_BASE_URL="${public_base}" \
+  PROJECT_ID="${PROJECT_ID}" \
+    REGION="${REGION}" \
+    FIRESTORE_DATABASE="${FIRESTORE_DATABASE}" \
+    RUNTIME_SA="${RUNTIME_SA}" \
+    CURSOR_SECRET="${CURSOR_SECRET}" \
+    AWR_PUBLIC_BASE_URL="${public_base}" \
     AWR_OAUTH_ISSUER="${ISSUER}" \
     AWR_OAUTH_AUDIENCE="${audience}" \
     AWR_OAUTH_JWKS_URL="${JWKS_URL}" \
@@ -271,7 +293,9 @@ deploy_revision() {
 
 import_indexes() {
   log "Applying Firestore indexes and field exemptions"
-  PROJECT_ID="${PROJECT_ID}" "${ROOT}/deploy/apply_firestore_indexes.sh"
+  PROJECT_ID="${PROJECT_ID}" \
+    FIRESTORE_DATABASE="${FIRESTORE_DATABASE}" \
+    "${ROOT}/deploy/apply_firestore_indexes.sh"
 }
 
 smoke_public() {
@@ -306,13 +330,15 @@ Auth0 / ChatGPT (operator, not this script)
 Rollback
   gcloud run services update-traffic ${SERVICE} --region ${REGION} --to-revisions PREVIOUS=100
 
-Do not grant awr-runtime Vertex AI, BigQuery, or PreM3 storage roles.
+Do not grant awr-runtime Vertex AI, BigQuery, Cloud Storage, or project-wide
+administrative roles.
 EOF
 }
 
 main() {
   cd "${ROOT}"
   log "Agent Work Relay Cloud Run provisioner"
+  validate_operator_config
   ensure_gcloud
   authenticate
   select_project
@@ -323,7 +349,13 @@ main() {
   fi
 
   log "Creating runtime identity and least-privilege IAM"
-  "${ROOT}/deploy/gcp_setup.sh"
+  PROJECT_ID="${PROJECT_ID}" \
+    REGION="${REGION}" \
+    FIRESTORE_DATABASE="${FIRESTORE_DATABASE}" \
+    FIRESTORE_LOCATION="${FIRESTORE_LOCATION}" \
+    RUNTIME_SA="${RUNTIME_SA}" \
+    CURSOR_SECRET="${CURSOR_SECRET}" \
+    "${ROOT}/deploy/gcp_setup.sh"
   store_cursor_secret
 
   local url audience allowed

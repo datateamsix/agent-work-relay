@@ -141,19 +141,31 @@ uv run awr mcp
 See [docs/LIVE_PROTOTYPE.md](docs/LIVE_PROTOTYPE.md) for the golden-test
 runbook, Cloud Run deployment, ChatGPT connection, and rollback instructions.
 
-### Provision Cloud Run (operator machine)
+### Provision Cloud Run from Google Cloud Shell
 
-From a workstation with a browser (not this Cloud Agent VM):
+Create a dedicated, billing-enabled GCP project first. In Cloud Shell, clone
+this repository and set the project plus the **target repository Cursor will
+work against**. The provisioner fails closed if either value is missing.
 
 ```bash
-./scripts/provision_cloud_run.sh --issuer https://your-tenant.auth0.com/
+export PROJECT_ID=your-awr-project-id
+export REGION=us-central1
+export AWR_REPOSITORY_URL=https://github.com/your-org/your-target-repo
+export AWR_BASE_REF=main
+
+./scripts/provision_cloud_run.sh \
+  --skip-auth \
+  --issuer https://your-tenant.auth0.com/
 ```
 
-The script installs `gcloud` if needed, opens Google login, creates the
-`awr-runtime` identity, stores the Cursor API key in Secret Manager, deploys
-`agent-work-relay`, imports Firestore indexes, and smokes `/healthz` plus an
-unauthenticated `/mcp` 401. Auth0 API/client setup remains a human step; the
-script prints the exact audience URL after deploy.
+Cloud Shell already provides `gcloud` and an authenticated operator identity.
+The script verifies the selected project, creates or verifies the Firestore
+Native database with delete protection, creates `awr-runtime`, stores the
+Cursor API key in Secret Manager, deploys `agent-work-relay`, imports Firestore
+indexes, and smokes `/healthz` plus an unauthenticated `/mcp` 401. It does not
+create a GCP project, attach billing, or create Auth0/WorkOS resources. The
+authorization-server API/client setup remains a human step; the script prints
+the exact audience URL after deploy.
 
 Authorization-server selection is documented in [docs/AUTH.md](docs/AUTH.md).
 The PreM3 Clerk setup is not used; AWR is an OAuth resource server in front of

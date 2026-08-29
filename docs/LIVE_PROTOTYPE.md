@@ -157,25 +157,51 @@ challenge when no bearer token is present.
 
 ## 6. GCP setup and Cloud Run deploy
 
-This step requires a human-authenticated `gcloud` session as a
-`modelready-m3` owner. The agent must not receive the Cursor API key.
+Use a dedicated, billing-enabled AWR project. This step requires a
+human-authenticated `gcloud` session with permission to enable services,
+manage the AWR service account and repository, and deploy Cloud Run. The agent
+must not receive the Cursor API key.
 
-Preferred path — one script on an operator workstation with a browser:
+Preferred path from Google Cloud Shell:
 
 ```bash
-./scripts/provision_cloud_run.sh --issuer https://your-tenant.auth0.com/
+git clone https://github.com/datateamsix/agent-work-relay.git
+cd agent-work-relay
+
+export PROJECT_ID=your-awr-project-id
+export REGION=us-central1
+export FIRESTORE_DATABASE='(default)'
+export FIRESTORE_LOCATION=us-central1
+export AWR_REPOSITORY_URL=https://github.com/your-org/your-target-repo
+export AWR_BASE_REF=main
+
+./scripts/provision_cloud_run.sh \
+  --skip-auth \
+  --issuer https://your-tenant.auth0.com/
 ```
 
-The provisioner installs the Cloud SDK if it is missing, runs `gcloud auth
-login`, creates `awr-runtime`, stores `awr-cursor-api-key`, deploys
+`AWR_REPOSITORY_URL` is the repository Cursor will plan and execute against;
+it is not the Git repository containing the broker unless AWR itself is the
+intentional test target.
+
+The provisioner requires the project to exist with billing attached. It
+creates or verifies a Firestore Native database with delete protection,
+creates `awr-runtime`, stores `awr-cursor-api-key`, deploys
 `agent-work-relay`, sets `AWR_PUBLIC_BASE_URL` / audience / `AWR_ALLOWED_HOSTS`
 to the assigned `*.run.app` URL, imports Firestore indexes, and runs
-`scripts/smoke_test.sh` against the public URL.
+`scripts/smoke_test.sh` against the public URL. It fails closed when the
+project, target repository, OAuth issuer, or Firestore mode is invalid.
 
 Equivalent manual steps:
 
 ```bash
-gcloud auth login
+export PROJECT_ID=your-awr-project-id
+export REGION=us-central1
+export FIRESTORE_DATABASE='(default)'
+export FIRESTORE_LOCATION=us-central1
+export AWR_REPOSITORY_URL=https://github.com/your-org/your-target-repo
+
+gcloud config set project "${PROJECT_ID}"
 ./deploy/gcp_setup.sh
 gcloud secrets versions add awr-cursor-api-key --data-file=-
 export AWR_OAUTH_ISSUER=https://your-tenant.auth0.com/
@@ -186,10 +212,10 @@ export AWR_ALLOWED_HOSTS=YOUR-SERVICE-HOST
 ./deploy/apply_firestore_indexes.sh
 ```
 
-Runtime identity: `awr-runtime@modelready-m3.iam.gserviceaccount.com`.
+Runtime identity: `awr-runtime@${PROJECT_ID}.iam.gserviceaccount.com`.
 
-Do not grant Vertex AI, BigQuery, or Cloud Storage roles. Do not deploy into
-the PreM3 Cloud Run service.
+Do not grant Vertex AI, BigQuery, Cloud Storage, or project-wide administrative
+roles. AWR must remain separate from the PreM3 project and Cloud Run service.
 
 Rollback: `gcloud run services update-traffic agent-work-relay --to-revisions PREVIOUS=100`.
 
@@ -217,5 +243,5 @@ must not create a second Cursor agent.
 
 - Polling is caller-driven (`refresh_planning`). Cloud Tasks comes later.
 - Static tokens are a local-only escape hatch.
-- Live GCP deploy still needs a human-authenticated `gcloud` login, an Auth0
+- Live GCP deploy still needs a human-authenticated GCP operator, an Auth0
   tenant, and a Secret Manager value that never enters the agent conversation.
