@@ -675,12 +675,10 @@ class _SQLiteWorkOrderSession:
                 "scope": row["scope"],
                 "created_at": row["created_at"],
                 "idempotency_key": row["idempotency_key"],
-                "rationale": row["rationale"] if "rationale" in row.keys() else "",
-                "expires_at": row["expires_at"] if "expires_at" in row.keys() else None,
-                "fingerprint": row["fingerprint"] if "fingerprint" in row.keys() else None,
-                "receipt": json.loads(row["receipt_json"])
-                if "receipt_json" in row.keys() and row["receipt_json"]
-                else None,
+                "rationale": row["rationale"] or "",
+                "expires_at": row["expires_at"],
+                "fingerprint": row["fingerprint"],
+                "receipt": json.loads(row["receipt_json"]) if row["receipt_json"] else None,
             }
             for row in rows
         ]

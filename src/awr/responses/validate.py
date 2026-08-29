@@ -382,6 +382,11 @@ def _assign_markdown_body(mapping: dict[str, Any], body: str) -> None:
     title = mapping.get("title")
     prefix = f"# {title}\n\n" if isinstance(title, str) and title else ""
     text = body[len(prefix) :] if prefix and body.startswith(prefix) else body
+    if response_type == "question.blocked" and "questions" not in mapping:
+        questions = _questions_from_body(text)
+        if questions:
+            mapping["questions"] = questions
+        return
     headings = {
         "plan.completed": ("content", None),
         "execution.completed": ("summary", "# Execution completed\n\n"),
@@ -401,6 +406,19 @@ def _assign_markdown_body(mapping: dict[str, Any], body: str) -> None:
     if heading and text.startswith(heading):
         text = text[len(heading) :]
     mapping[field] = text
+
+
+def _questions_from_body(text: str) -> list[dict[str, str]]:
+    heading = "# Blocking questions\n\n"
+    body = text.removeprefix(heading)
+    questions: list[dict[str, str]] = []
+    for line in body.splitlines():
+        stripped = line.strip()
+        if not stripped.startswith("- ") or ":" not in stripped:
+            continue
+        ident, _, prompt = stripped[2:].partition(":")
+        questions.append({"id": ident.strip(), "text": prompt.strip()})
+    return questions
 
 
 def _parse_awr_block(text: str) -> dict[str, str]:

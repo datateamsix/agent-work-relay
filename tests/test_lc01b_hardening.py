@@ -339,15 +339,17 @@ class ReplayAndConcurrencyTests(unittest.TestCase):
                 "broker:awr",
                 {"message_id": "MSG-A"},
             )
-        with self.assertRaisesRegex(RuntimeError, "Concurrent ledger update"):
-            with store.lock_work_order(work_order.work_order_id) as session:
-                session._base_sequence = first.sequence - 1
-                session.append_ledger(
-                    "plan.completed",
-                    work_order.recipient,
-                    "broker:awr",
-                    {"message_id": "MSG-B"},
-                )
+        with (
+            self.assertRaisesRegex(RuntimeError, "Concurrent ledger update"),
+            store.lock_work_order(work_order.work_order_id) as session,
+        ):
+            session._base_sequence = first.sequence - 1
+            session.append_ledger(
+                "plan.completed",
+                work_order.recipient,
+                "broker:awr",
+                {"message_id": "MSG-B"},
+            )
         packet = {
             "packet_id": "MSG-PLAN",
             "response_type": "plan.completed",
@@ -362,10 +364,12 @@ class ReplayAndConcurrencyTests(unittest.TestCase):
         }
         with store.lock_work_order(work_order.work_order_id) as session:
             session.put_response_packet(packet)
-        with self.assertRaisesRegex(RuntimeError, "Concurrent ledger update"):
-            with store.lock_work_order(work_order.work_order_id) as session:
-                session._base_sequence = 0
-                session.put_response_packet({**packet, "packet_id": "MSG-PLAN-OTHER"})
+        with (
+            self.assertRaisesRegex(RuntimeError, "Concurrent ledger update"),
+            store.lock_work_order(work_order.work_order_id) as session,
+        ):
+            session._base_sequence = 0
+            session.put_response_packet({**packet, "packet_id": "MSG-PLAN-OTHER"})
         with store.lock_work_order(work_order.work_order_id) as session:
             session._base_sequence = 0
             session.put_response_packet(packet)

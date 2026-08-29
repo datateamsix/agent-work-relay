@@ -90,6 +90,18 @@ class ResponseContractTests(unittest.TestCase):
             response_packet_cache_key(canonical_sha256=packet.content_sha256 or ""),
         )
 
+    def test_question_blocked_render_round_trip(self) -> None:
+        packet = parse_response_packet(
+            _base(
+                response_type="question.blocked",
+                payload={"questions": [{"id": "q1", "text": "Which API?"}]},
+            )
+        )
+        rendered = parse_response_markdown(render_response_markdown(packet))
+        self.assertEqual(rendered.response_type, ResponseType.QUESTION_BLOCKED)
+        self.assertEqual(rendered.payload["questions"][0]["id"], "q1")
+        self.assertEqual(rendered.content_sha256, fingerprint_packet(rendered))
+
     def test_execution_acknowledged_render_round_trip(self) -> None:
         packet = parse_response_packet(
             _base(

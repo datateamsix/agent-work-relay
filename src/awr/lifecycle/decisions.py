@@ -112,7 +112,7 @@ def decision_is_expired(decision: StoredDecision, *, now: datetime | None = None
     if not decision.expires_at:
         return False
     raw = decision.expires_at
-    parsed = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+    parsed = datetime.fromisoformat(raw)
     if parsed.tzinfo is None:
         parsed = parsed.replace(tzinfo=UTC)
     clock = now or datetime.now(UTC)

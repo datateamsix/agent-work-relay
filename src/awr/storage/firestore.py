@@ -372,10 +372,12 @@ class _FirestoreWorkOrderSession:
                 .stream(transaction=transaction)
             }
             existing_packet_ids = {
-                str(item.id) for item in self._responses_collection().stream(transaction=transaction)
+                str(item.id)
+                for item in self._responses_collection().stream(transaction=transaction)
             }
             existing_decision_ids = {
-                str(item.id) for item in self._decisions_collection().stream(transaction=transaction)
+                str(item.id)
+                for item in self._decisions_collection().stream(transaction=transaction)
             }
             if current_sequence != self._base_sequence:
                 remaining_events = [

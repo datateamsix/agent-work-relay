@@ -220,12 +220,16 @@ class KernelGuardTests(unittest.TestCase):
             plan_id="PLAN-1",
             plan_sha256=PLAN_SHA,
             bound_agent_id="cursor:bound-run",
+            participants=frozenset(
+                {"human:owner", "cursor:worker", "cursor:bound-run", "broker:awr"}
+            ),
             executor_principals=frozenset({"cursor:worker", "cursor:bound-run"}),
         )
         for actor in ("cursor:worker", "cursor:bound-run"):
             decision = replace(_approval(), actor=actor)
-            with self.subTest(actor=actor), self.assertRaisesRegex(
-                AuthorityError, "cannot record human decisions"
+            with (
+                self.subTest(actor=actor),
+                self.assertRaisesRegex(AuthorityError, "cannot record human decisions"),
             ):
                 apply_decision(
                     status=WorkStatus.WAITING_FOR_PLAN_APPROVAL,
