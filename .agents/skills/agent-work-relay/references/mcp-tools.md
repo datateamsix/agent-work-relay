@@ -21,6 +21,8 @@ Prepared EX-01 scope, do not claim it exists before discovery:
 | `awr:refresh` | `refresh_external_run` once the server lists it |
 
 There is no `awr:input` or `submit_input` on the `762cbe4` runtime.
+`get_work_order` cannot transmit `@input` packets. Only `feature.plan` and
+`refinement.plan` have a public mutation path today.
 
 ## `submit_prompt_for_planning`
 

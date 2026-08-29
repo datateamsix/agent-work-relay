@@ -11,5 +11,9 @@ uv run python .agents/skills/agent-work-relay/scripts/generate_gt003.py
 uv run python .agents/skills/agent-work-relay/scripts/validate_gt003.py
 ```
 
+The happy-path `review.completed` outcome is `APPROVED`. That is a
+recommendation only. Valid outcomes are `APPROVED`, `REVISE`, and
+`REJECTED`. Only `REVISE` moves the work order to `REVISION_REQUIRED`.
+
 Do not treat these packets as live broker receipts. Do not embed credentials
 or live cloud identifiers.

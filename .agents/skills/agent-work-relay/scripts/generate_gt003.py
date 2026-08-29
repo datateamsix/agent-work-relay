@@ -542,6 +542,7 @@ human explicitly accepts. Agent recommendation grants no authority.
             "accept_completion": accept_decision_id,
         },
         "review_id": review_id,
+        "review_outcome": "APPROVED",
         "actors": {
             "planner": actor_planner,
             "worker": actor_worker,

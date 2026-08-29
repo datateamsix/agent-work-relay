@@ -13,9 +13,11 @@ not authorize transmission.
 3. Show the durable acceptance receipt. Do not claim success without it.
 4. Retrieve the plan with `refresh_planning` or `get_plan`.
 5. For a bounded plan change, draft `plan.revise` bound to the plan ID and
-   SHA-256. Transmit only through an available input or adapter path.
-6. Answer `question.blocked` with `question.answer`. A clarification does not
-   authorize execution.
+   SHA-256. Transmission requires `submit_input`, which is not on this
+   baseline. Stop and name that missing capability; do not send it through
+   `get_work_order`.
+6. Draft `question.answer` the same way. A clarification does not authorize
+   execution and cannot be transmitted until `submit_input` exists.
 7. Request human plan approval through the broker event
    `plan.approval_requested`, not `record_decision`.
 8. After a human approves, the stored decision must cite the exact plan ID

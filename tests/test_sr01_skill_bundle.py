@@ -1,32 +1,55 @@
 from __future__ import annotations
 
+import importlib.util
 import json
+import sys
 from pathlib import Path
-
-from capability import classify_tool, missing_capability, mutation_ready
-from skill_paths import (
-    BASELINE_TOOLS,
-    EX01_TOOLS,
-    EXAMPLES_GT003,
-    MANIFEST_PATH,
-    SKILL_ROOT,
-    TEMPLATES_DIR,
-)
-from template_io import (
-    FRONTMATTER_SECRET_RE,
-    UNSUPPORTED_CLAIM_RE,
-    load_manifest,
-    parse_template,
-    sha256_file,
-    template_direction,
-)
-from validate_gt003 import EXPECTED_KINDS, validate_gt003_fixtures
-from validate_skill_bundle import validate_bundle
+from types import ModuleType
 
 from awr.responses import ResponsePacketError, parse_response_markdown, parse_response_packet
 from awr.responses.canonical import fingerprint_packet
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
+_SCRIPTS = REPO_ROOT / ".agents" / "skills" / "agent-work-relay" / "scripts"
+
+
+def _load_script(name: str) -> ModuleType:
+    path = _SCRIPTS / f"{name}.py"
+    spec = importlib.util.spec_from_file_location(f"awr_sr01_{name}", path)
+    if spec is None or spec.loader is None:
+        raise ImportError(f"Cannot load {path}")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+_skill_paths = _load_script("skill_paths")
+_template_io = _load_script("template_io")
+_capability = _load_script("capability")
+_validate_gt003 = _load_script("validate_gt003")
+_validate_bundle = _load_script("validate_skill_bundle")
+
+BASELINE_TOOLS = _skill_paths.BASELINE_TOOLS
+EX01_TOOLS = _skill_paths.EX01_TOOLS
+EXAMPLES_GT003 = _skill_paths.EXAMPLES_GT003
+MANIFEST_PATH = _skill_paths.MANIFEST_PATH
+OPERATIONAL_INPUT_INTENTS = _skill_paths.OPERATIONAL_INPUT_INTENTS
+READ_ONLY_TOOLS = _skill_paths.READ_ONLY_TOOLS
+SKILL_ROOT = _skill_paths.SKILL_ROOT
+TEMPLATES_DIR = _skill_paths.TEMPLATES_DIR
+classify_tool = _capability.classify_tool
+missing_capability = _capability.missing_capability
+mutation_ready = _capability.mutation_ready
+FRONTMATTER_SECRET_RE = _template_io.FRONTMATTER_SECRET_RE
+UNSUPPORTED_CLAIM_RE = _template_io.UNSUPPORTED_CLAIM_RE
+load_manifest = _template_io.load_manifest
+parse_template = _template_io.parse_template
+sha256_file = _template_io.sha256_file
+template_direction = _template_io.template_direction
+EXPECTED_KINDS = _validate_gt003.EXPECTED_KINDS
+validate_gt003_fixtures = _validate_gt003.validate_gt003_fixtures
+validate_bundle = _validate_bundle.validate_bundle
 
 
 def test_skill_bundle_validator_passes() -> None:
@@ -43,9 +66,27 @@ def test_manifest_ids_unique_and_hashes_match() -> None:
         path = SKILL_ROOT / "assets" / item["file"]
         assert item["sha256"] == sha256_file(path)
         assert item["template_version"] >= 2
-        if item["id"] == "awr.input.bugfix-plan":
+
+
+def test_operational_inputs_have_public_mutation_paths() -> None:
+    manifest = load_manifest(MANIFEST_PATH)
+    operational_inputs: list[str] = []
+    for item in manifest["templates"]:
+        if item["direction"] != "input":
+            continue
+        if item["operational_status"] == "operational":
+            operational_inputs.append(item["intent_or_response_type"])
+            assert item["required_mcp_capability"] not in READ_ONLY_TOOLS
+            assert item["required_mcp_capability"] in {
+                "submit_prompt_for_planning",
+                "submit_work_bundle_for_planning",
+            }
+            assert item["intent_or_response_type"] in OPERATIONAL_INPUT_INTENTS
+        else:
             assert item["operational_status"] == "prepared"
-            assert item["minimum_lifecycle_capability"] == "submit_input"
+            assert item.get("missing_capability")
+            assert item["required_mcp_capability"] not in READ_ONLY_TOOLS
+    assert set(operational_inputs) == OPERATIONAL_INPUT_INTENTS
 
 
 def test_template_reference_routing_and_decorators() -> None:
@@ -151,6 +192,7 @@ def test_gt003_lineage_and_expected_timeline() -> None:
     assert completed.work_order_id == work_order_id
     assert review.authority == "report_only"
     assert review.payload["outcome"] == "APPROVED"
+    assert ids["review_outcome"] == "APPROVED"
     assert ids["repository_url"] == "https://github.com/example/fixture-relay"
 
 
@@ -182,8 +224,8 @@ def test_no_embedded_secrets_or_unsupported_claims() -> None:
         for phrase in forbidden_cursor + forbidden_delivery:
             assert phrase not in lowered, f"{path} contains {phrase}"
     worker = (SKILL_ROOT / "references" / "worker-workflows.md").read_text(encoding="utf-8")
-    assert "outbound MCP is not required for Cursor Cloud" in worker
-    assert "Never require Cursor Cloud to open an outbound MCP connection." in worker
+    assert "capability-detected" in worker
+    assert "exposes outbound AWR MCP" in worker
 
 
 def test_runtime_parser_rejects_authority_and_unknown_type() -> None:
@@ -199,3 +241,9 @@ def test_runtime_parser_rejects_authority_and_unknown_type() -> None:
         assert "never grant" in str(exc)
     else:
         raise AssertionError("authority override must fail closed")
+
+
+def test_pytest_pythonpath_does_not_include_skill_scripts() -> None:
+    text = (REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8")
+    assert ".agents/skills/agent-work-relay/scripts" not in text
+    assert 'pythonpath = ["src", "tests"]' in text

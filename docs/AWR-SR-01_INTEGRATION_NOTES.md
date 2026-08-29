@@ -10,6 +10,7 @@ No Codex/OpenAI `skill-creator` or hosted skill linter is installed in this
 environment. Validation used the repository scripts:
 
 ```bash
+uv run python .agents/skills/agent-work-relay/quick_validate.py
 uv run python .agents/skills/agent-work-relay/scripts/validate_skill_bundle.py
 uv run python .agents/skills/agent-work-relay/scripts/refresh_template_manifest.py
 uv run python .agents/skills/agent-work-relay/scripts/validate_gt003.py
@@ -24,13 +25,15 @@ uv run python .agents/skills/agent-work-relay/scripts/validate_gt003.py
    `refinement.plan` on that tool. The manifest therefore marks
    `bugfix.plan` as `prepared` / `submit_input`, not operational. Do not
    silently rewrite a bugfix packet as `feature.plan`.
-2. `plan.execute`, `plan.revise`, `question.answer`, `implementation.refine`,
-   and `completion.review` are packet or broker-event shapes. They are not
-   MCP tools. Adapters or a later `submit_input` path must carry them.
+2. `plan.revise`, `question.answer`, and `completion.review` are prepared
+   `@input` packets. They need `submit_input`. `plan.execute` and
+   `implementation.refine` also need AWR-EX-01 dispatch. `get_work_order`
+   cannot transmit them. The manifest marks all five `prepared`.
 3. `request_plan_approval` / `plan.approval_requested` is a broker event, not
    a stored `record_decision`.
-4. Review packet outcome is `APPROVED` | `REVISE` | `REJECTED`. The work-order
-   state for `REVISE` is `REVISION_REQUIRED`.
+4. Review packet outcomes are `APPROVED`, `REVISE`, and `REJECTED`. Only
+   `REVISE` moves the work order to `REVISION_REQUIRED`. GT-003 uses
+   `APPROVED` as the happy-path recommendation.
 5. The parent field on `awr.response/v1` is `in_reply_to`, not `parent_id`.
    The packet fingerprint field is `content_sha256`.
 6. `receipt.accepted` payload requires `receipt_type`, `status`, and

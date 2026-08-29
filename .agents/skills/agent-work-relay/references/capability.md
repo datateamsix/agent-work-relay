@@ -32,8 +32,19 @@ event (`dispatch_execution` / adapter), not a stored decision.
 
 There is no `submit_input` tool on this baseline. Planners transmit
 `feature.plan` and `refinement.plan` through `submit_prompt_for_planning`.
-`bugfix.plan` is a prepared skill intent until that intake exists. Do not
-rewrite it as `feature.plan`.
+These `@input` intents are prepared until a mutation tool can accept them:
+
+| Intent | Missing capability |
+|---|---|
+| `bugfix.plan` | `submit_input` |
+| `plan.revise` | `submit_input` |
+| `question.answer` | `submit_input` |
+| `completion.review` | `submit_input` |
+| `plan.execute` | `submit_input` and AWR-EX-01 dispatch |
+| `implementation.refine` | `submit_input` and AWR-EX-01 dispatch |
+
+`get_work_order` is read-only. It cannot transmit those packets. Do not
+rewrite `bugfix.plan` as `feature.plan`.
 
 ## Prepared, not operational until EX-01
 

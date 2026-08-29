@@ -27,6 +27,7 @@
     "accept_completion": "dec_gt003_accept_completion"
   },
   "review_id": "rev_gt003_v1",
+  "review_outcome": "APPROVED",
   "actors": {
     "planner": "planner:gt003.catalog",
     "worker": "executor:gt003.worker",

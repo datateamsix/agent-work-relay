@@ -17,7 +17,7 @@ runtime graph, not a convenience sketch.
 | Work | optional `execution.progress` | stays `EXECUTING` |
 | Complete | `execution.completed` or `execution.failed` | `COMPLETION_READY` or `FAILED` |
 | Review request | broker `completion.review` | `PLANNER_REVIEWING` |
-| Review | `review.completed` | recommendation only; `WAITING_FOR_HUMAN_REVIEW` or `REVISION_REQUIRED` |
+| Review | `review.completed` | recommendation only: `APPROVED` / `REJECTED` → `WAITING_FOR_HUMAN_REVIEW`; only `REVISE` → `REVISION_REQUIRED` |
 | Refine | broker `implementation.refine` | `EXECUTION_DISPATCHED` in the same lineage |
 | Close | human `accept_completion` | `COMPLETE` |
 

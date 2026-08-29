@@ -1,11 +1,14 @@
 # Worker workflow
 
-A coding agent may work in direct MCP mode or adapter-return mode. Direct
-outbound MCP is not required for Cursor Cloud.
+A coding agent may work in direct MCP mode or adapter-return mode.
+Transport is capability-detected. Use direct MCP only when the current
+environment exposes outbound AWR MCP tools such as `get_work_order` and
+`submit_response`. Otherwise use adapter-return mode.
 
 ## Direct MCP mode
 
-Use this mode only when the coding agent has authenticated AWR tools.
+Use this mode only when the connected environment lists authenticated AWR
+tools.
 
 1. List tools. Confirm `get_work_order`, `get_work_order_timeline`, and
    `submit_response` are present.
@@ -18,8 +21,9 @@ Use this mode only when the coding agent has authenticated AWR tools.
 
 ## Adapter-return mode
 
-Use this mode when the worker cannot call AWR MCP. Cursor Cloud workers
-typically use this path.
+Use this mode when the worker's environment does not expose outbound AWR
+MCP tools. Cursor Cloud often has no outbound MCP; detect that from the
+tool list rather than assuming either mode.
 
 1. The AWR wrapper and this repository skill are the authoritative context.
 2. Return exactly one compact `@response` packet in the provider result.
@@ -27,7 +31,8 @@ typically use this path.
 4. Do not claim that this worker updated AWR, stored a receipt, or changed
    work-order state.
 
-Never require Cursor Cloud to open an outbound MCP connection.
+Do not require Cursor Cloud to open outbound MCP. If tools are absent,
+return one compact `@response` for the adapter.
 
 ## Planning
 

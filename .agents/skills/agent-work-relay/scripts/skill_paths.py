@@ -56,4 +56,21 @@ BASELINE_TOOLS = frozenset(
     }
 )
 EX01_TOOLS = frozenset({"refresh_external_run"})
+READ_ONLY_TOOLS = frozenset(
+    {
+        "get_work_order",
+        "get_work_order_timeline",
+        "list_pending_actions",
+        "get_plan",
+        "get_artifact_status",
+        "get_work_order_artifacts",
+    }
+)
+BASELINE_INPUT_MUTATIONS = frozenset(
+    {
+        "submit_prompt_for_planning",
+        "submit_work_bundle_for_planning",
+    }
+)
 KNOWN_SCOPES = frozenset({"awr:plan", "awr:read", "awr:refresh", "awr:response", "awr:decide"})
+OPERATIONAL_INPUT_INTENTS = frozenset({"feature.plan", "refinement.plan"})

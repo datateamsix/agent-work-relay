@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from skill_paths import (
+    BASELINE_INPUT_MUTATIONS,
     BASELINE_TOOLS,
     EX01_TOOLS,
     EXAMPLES_GT003,
@@ -16,6 +17,8 @@ from skill_paths import (
     KNOWN_SCOPES,
     MANIFEST_PATH,
     OPENAI_YAML,
+    OPERATIONAL_INPUT_INTENTS,
+    READ_ONLY_TOOLS,
     REFERENCES_DIR,
     RESPONSE_SCHEMA_PATH,
     RESPONSE_TYPES,
@@ -156,8 +159,8 @@ def _validate_manifest_and_templates() -> list[str]:
             errors.append(f"{template_id} requires submit_input and must stay prepared.")
         if capability == "as-04":
             errors.append(f"{template_id} must not require AS-04.")
-        if lifecycle == "bugfix.plan" and status == "operational":
-            errors.append("bugfix.plan must not be marked operational on this baseline.")
+        if direction == "input":
+            errors.extend(_validate_input_capability(template_id, item, lifecycle, status))
         if direction == "response":
             errors.extend(_validate_response_template(template_id, envelope, schema))
         if FRONTMATTER_SECRET_RE.search(parsed["text"]):
@@ -174,6 +177,42 @@ def _validate_manifest_and_templates() -> list[str]:
         errors.append(f"Orphaned template files: {sorted(missing)}")
     if extra:
         errors.append(f"Manifest lists missing files: {sorted(extra)}")
+    return errors
+
+
+def _validate_input_capability(
+    template_id: str, item: dict[str, Any], lifecycle: str, status: str
+) -> list[str]:
+    errors: list[str] = []
+    required_tool = str(item.get("required_mcp_capability") or "")
+    missing = str(item.get("missing_capability") or "").strip()
+    if status == "operational":
+        if required_tool in READ_ONLY_TOOLS:
+            errors.append(
+                f"{template_id} is operational but required_mcp_capability "
+                f"{required_tool} is read-only and cannot transmit the packet."
+            )
+        if required_tool not in BASELINE_INPUT_MUTATIONS:
+            errors.append(
+                f"{template_id} is operational but {required_tool} is not a "
+                "public baseline mutation that accepts this input."
+            )
+        if lifecycle not in OPERATIONAL_INPUT_INTENTS:
+            errors.append(
+                f"{template_id} ({lifecycle}) must stay prepared until a "
+                "public mutation tool can accept that packet."
+            )
+    if status == "prepared":
+        if not missing:
+            errors.append(
+                f"{template_id} is prepared but does not identify the missing "
+                "capability or work-slice dependency."
+            )
+        if required_tool in READ_ONLY_TOOLS:
+            errors.append(
+                f"{template_id} is prepared but still lists a read-only "
+                "required_mcp_capability; name the future mutation instead."
+            )
     return errors
 
 

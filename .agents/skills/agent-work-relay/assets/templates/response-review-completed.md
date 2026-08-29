@@ -16,7 +16,8 @@ awr:
 # Completion review: <title>
 
 Required protocol fields are in the envelope. Packet outcome must be
-`APPROVED`, `REVISE`, or `REJECTED`. `REVISE` yields `REVISION_REQUIRED`.
+`APPROVED`, `REVISE`, or `REJECTED`. Only `REVISE` yields
+`REVISION_REQUIRED`.
 
 ## Decision
 

@@ -15,9 +15,11 @@ A reviewing agent recommends. It cannot close a work order.
 8. Report `APPROVED`, `REVISE`, or `REJECTED` in `review.completed`.
 9. Keep `authority: report_only`.
 
-`REVISE` is the packet outcome. The work-order state becomes
-`REVISION_REQUIRED` when the broker applies it or a human records
-`request_revision`.
+Valid packet outcomes are `APPROVED`, `REVISE`, and `REJECTED`. Only
+`REVISE` moves the work order to `REVISION_REQUIRED`. `APPROVED` and
+`REJECTED` do not. A human or policy `request_revision` decision can also
+enter `REVISION_REQUIRED`. `APPROVED` still waits for stored
+`accept_completion`.
 
 ## Must include
 

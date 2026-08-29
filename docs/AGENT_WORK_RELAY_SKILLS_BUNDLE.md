@@ -67,8 +67,10 @@ stateDiagram-v2
     HumanReview --> Executing: request_revision / implementation.refine
 ```
 
-`review.completed` is a recommendation. Only a stored human or policy
-`accept_completion` decision closes the work order.
+`review.completed` is a recommendation with outcome `APPROVED`, `REVISE`,
+or `REJECTED`. Only `REVISE` moves the work order to `REVISION_REQUIRED`.
+Only a stored human or policy `accept_completion` decision closes the
+work order.
 
 ## Capability matrix
 
@@ -80,6 +82,9 @@ stateDiagram-v2
 | `record_decision` | Operational | human or authorized policy only |
 | Work-order and timeline reads | Operational | `get_work_order`, `get_work_order_timeline`, `list_pending_actions` |
 | Planning refresh / `get_plan` | Operational | not execution refresh |
+| `@input` `feature.plan` / `refinement.plan` | Operational | `submit_prompt_for_planning` |
+| `@input` `bugfix.plan`, `plan.revise`, `question.answer`, `completion.review` | Prepared | missing `submit_input` |
+| `@input` `plan.execute`, `implementation.refine` | Prepared | missing `submit_input` and AWR-EX-01 |
 | LC-01B execution and review transitions | Operational | through submitted packets and stored decisions |
 | Real Cursor execution dispatch | Prepared (EX-01) | stop if the user asked to execute and tools are missing |
 | `refresh_external_run` | Prepared (EX-01) | do not invent the tool |
@@ -94,13 +99,14 @@ broker receipt.
 
 ## Direct MCP versus adapter-return
 
-Workers with authenticated AWR tools retrieve the work order and submit
-`@response` packets through `submit_response`.
+Transport is capability-detected. Use direct MCP only when the current
+environment exposes outbound AWR tools (`get_work_order`,
+`submit_response`). Then retrieve the work order and submit `@response`
+packets through `submit_response`.
 
-Cursor Cloud and other workers may not call AWR MCP. In adapter-return
-mode the worker returns one compact `@response` in the provider result.
-The trusted adapter validates and submits it. Direct outbound MCP is not
-required for Cursor execution.
+Otherwise use adapter-return: the worker returns one compact `@response`
+in the provider result, and the trusted adapter validates and submits it.
+Do not assume Cursor Cloud can call MCP, and do not require it to.
 
 ## Compact responses
 
@@ -112,6 +118,7 @@ artifact references. Response templates stay compact and always set
 
 ```bash
 uv run python .agents/skills/agent-work-relay/scripts/refresh_template_manifest.py
+uv run python .agents/skills/agent-work-relay/quick_validate.py
 uv run python .agents/skills/agent-work-relay/scripts/validate_skill_bundle.py
 uv run python .agents/skills/agent-work-relay/scripts/validate_gt003.py
 ```

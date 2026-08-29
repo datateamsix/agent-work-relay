@@ -39,6 +39,7 @@ REQUIRED_ID_KEYS = (
     "source_input_sha256",
     "executor_run_id",
     "repository_url",
+    "review_outcome",
 )
 
 RESPONSE_FILES = (
@@ -130,6 +131,12 @@ def validate_gt003_fixtures(root: Path | None = None) -> list[str]:
         and ids.get("plan_sha256") != parsed["plan.completed"].content_sha256
     ):
         errors.append("plan_sha256 must equal the plan.completed packet fingerprint.")
+    if "review.completed" in parsed:
+        outcome = parsed["review.completed"].payload.get("outcome")
+        if outcome != ids.get("review_outcome"):
+            errors.append("GT-003 review outcome does not match fixture-ids.json.")
+        if outcome not in {"APPROVED", "REVISE", "REJECTED"}:
+            errors.append("GT-003 review outcome must be APPROVED, REVISE, or REJECTED.")
     errors.extend(_validate_decisions(directory, ids, parsed))
     timeline = _load_json(directory / "12-expected-timeline.json")
     if not isinstance(timeline, list) or len(timeline) < 12:

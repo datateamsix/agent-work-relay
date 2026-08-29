@@ -29,9 +29,9 @@ intent lives in typed frontmatter.
 | `completion.review` | Ask a reviewer to recommend | `review_only` |
 
 On this baseline, `feature.plan` and `refinement.plan` transmit through
-`submit_prompt_for_planning`. Other `@input` intents are adapter or broker
-events until a `submit_input` tool exists. See
-[capability.md](capability.md).
+`submit_prompt_for_planning`. Other `@input` intents are prepared: they
+need `submit_input`, and `plan.execute` / `implementation.refine` also
+need AWR-EX-01. See [capability.md](capability.md).
 
 ## Response types
 
@@ -46,8 +46,9 @@ events until a `submit_input` tool exists. See
 | `execution.failed` | Terminal failure and recovery | Worker or adapter |
 | `review.completed` | `APPROVED`, `REVISE`, or `REJECTED` | Reviewer |
 
-Review packet outcome `REVISE` yields work-order state `REVISION_REQUIRED`.
-The packet does not close the work order.
+Valid review outcomes are `APPROVED`, `REVISE`, and `REJECTED`. Only
+`REVISE` moves the work order to `REVISION_REQUIRED`. The packet does not
+close the work order.
 
 ## Canonical envelopes
 

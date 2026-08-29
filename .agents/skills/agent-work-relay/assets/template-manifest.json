@@ -37,6 +37,7 @@
       "required_oauth_scope": "awr:plan",
       "minimum_lifecycle_capability": "submit_input",
       "operational_status": "prepared",
+      "missing_capability": "submit_input",
       "file": "templates/input-bugfix-plan.md",
       "sha256": "65885aac10247c1f3e852f08ba32fd41eee2b0251bad380a1802ee7b5b618559"
     },
@@ -65,10 +66,11 @@
         "planner"
       ],
       "schema_version": "awr.input/v1",
-      "required_mcp_capability": "get_work_order",
-      "required_oauth_scope": "awr:read",
-      "minimum_lifecycle_capability": "baseline",
-      "operational_status": "operational",
+      "required_mcp_capability": "submit_input",
+      "required_oauth_scope": "awr:plan",
+      "minimum_lifecycle_capability": "submit_input",
+      "operational_status": "prepared",
+      "missing_capability": "submit_input",
       "file": "templates/input-plan-revise.md",
       "sha256": "4997e6cc05c17b3dd8c52a0f24fbaeb5bf2b1facec855a4ee50c4ff682025357"
     },
@@ -82,10 +84,11 @@
         "adapter"
       ],
       "schema_version": "awr.input/v1",
-      "required_mcp_capability": "get_work_order",
-      "required_oauth_scope": "awr:read",
-      "minimum_lifecycle_capability": "baseline",
-      "operational_status": "operational",
+      "required_mcp_capability": "submit_input",
+      "required_oauth_scope": "awr:plan",
+      "minimum_lifecycle_capability": "ex-01",
+      "operational_status": "prepared",
+      "missing_capability": "submit_input; AWR-EX-01",
       "file": "templates/input-plan-execute.md",
       "sha256": "9b60dbcb1cd88691c23650d84512ad7632e7c2285022e4c7059443dba1c71ff8"
     },
@@ -99,10 +102,11 @@
         "human"
       ],
       "schema_version": "awr.input/v1",
-      "required_mcp_capability": "get_work_order",
-      "required_oauth_scope": "awr:read",
-      "minimum_lifecycle_capability": "baseline",
-      "operational_status": "operational",
+      "required_mcp_capability": "submit_input",
+      "required_oauth_scope": "awr:plan",
+      "minimum_lifecycle_capability": "submit_input",
+      "operational_status": "prepared",
+      "missing_capability": "submit_input",
       "file": "templates/input-question-answer.md",
       "sha256": "64f8e3b191a500e255386323641528096f2f0f11d9054f8d84b47e480a832936"
     },
@@ -116,10 +120,11 @@
         "adapter"
       ],
       "schema_version": "awr.input/v1",
-      "required_mcp_capability": "get_work_order",
-      "required_oauth_scope": "awr:read",
-      "minimum_lifecycle_capability": "baseline",
-      "operational_status": "operational",
+      "required_mcp_capability": "submit_input",
+      "required_oauth_scope": "awr:plan",
+      "minimum_lifecycle_capability": "ex-01",
+      "operational_status": "prepared",
+      "missing_capability": "submit_input; AWR-EX-01",
       "file": "templates/input-implementation-refine.md",
       "sha256": "642aa4f31a82ea9fd83b4062fd11043e3ff1c004df09c5e9e6a08a70f1d2ceea"
     },
@@ -133,10 +138,11 @@
         "adapter"
       ],
       "schema_version": "awr.input/v1",
-      "required_mcp_capability": "get_work_order",
-      "required_oauth_scope": "awr:read",
-      "minimum_lifecycle_capability": "baseline",
-      "operational_status": "operational",
+      "required_mcp_capability": "submit_input",
+      "required_oauth_scope": "awr:plan",
+      "minimum_lifecycle_capability": "submit_input",
+      "operational_status": "prepared",
+      "missing_capability": "submit_input",
       "file": "templates/input-completion-review.md",
       "sha256": "1e88e499391487252269cad77482ce8cd7a8fd40299c89d4089afeb030fca265"
     },
@@ -260,7 +266,7 @@
     },
     {
       "id": "awr.response.review-completed",
-      "template_version": 2,
+      "template_version": 3,
       "direction": "response",
       "intent_or_response_type": "review.completed",
       "applicable_roles": [
@@ -273,7 +279,7 @@
       "minimum_lifecycle_capability": "baseline",
       "operational_status": "operational",
       "file": "templates/response-review-completed.md",
-      "sha256": "9e02c3583d6fdf4a0514ab8084132e6a0816f296a7181b6b796a4bd154e7fdab"
+      "sha256": "65730ac3441e8b5c435e97d42e138ccc5b325203dcd25960cdbbf54dd31e8606"
     }
   ]
 }

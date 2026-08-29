@@ -40,8 +40,9 @@ Remote or cloud agents cannot see a laptop global skill directory.
 Configure AWR MCP in project or managed settings. Do not commit bearer
 tokens.
 
-Cursor Cloud workers usually cannot call AWR MCP. Use adapter-return mode
-from [worker-workflows.md](worker-workflows.md). Do not tell a cloud
+Cursor Cloud transport is capability-detected. Use direct MCP only when
+that environment lists outbound AWR tools. Otherwise use adapter-return
+mode from [worker-workflows.md](worker-workflows.md). Do not tell a cloud
 worker it must open outbound MCP.
 
 ## Claude Code
