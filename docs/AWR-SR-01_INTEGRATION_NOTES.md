@@ -21,7 +21,9 @@ uv run python .agents/skills/agent-work-relay/scripts/validate_gt003.py
    Planners transmit `feature.plan` and `refinement.plan` through
    `submit_prompt_for_planning`. `bugfix.plan` is a skill-level planning
    intent; the current decorator parser only accepts `feature.plan` and
-   `refinement.plan` on that tool.
+   `refinement.plan` on that tool. The manifest therefore marks
+   `bugfix.plan` as `prepared` / `submit_input`, not operational. Do not
+   silently rewrite a bugfix packet as `feature.plan`.
 2. `plan.execute`, `plan.revise`, `question.answer`, `implementation.refine`,
    and `completion.review` are packet or broker-event shapes. They are not
    MCP tools. Adapters or a later `submit_input` path must carry them.

@@ -6,8 +6,10 @@ not authorize transmission.
 ## Sequence
 
 1. Draft a `feature.plan` or `bugfix.plan` work packet.
-2. Transmit only when the user asks to send it. On this baseline, call
-   `submit_prompt_for_planning` after confirming that tool is listed.
+2. Transmit only when the user asks to send it. On this baseline,
+   `submit_prompt_for_planning` accepts `feature.plan` and
+   `refinement.plan` only. If the draft is `bugfix.plan`, stop and say
+   that intake is missing; do not silently rewrite it as `feature.plan`.
 3. Show the durable acceptance receipt. Do not claim success without it.
 4. Retrieve the plan with `refresh_planning` or `get_plan`.
 5. For a bounded plan change, draft `plan.revise` bound to the plan ID and

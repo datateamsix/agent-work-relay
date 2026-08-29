@@ -33,10 +33,10 @@
         "planner"
       ],
       "schema_version": "awr.input/v1",
-      "required_mcp_capability": "submit_prompt_for_planning",
+      "required_mcp_capability": "submit_input",
       "required_oauth_scope": "awr:plan",
-      "minimum_lifecycle_capability": "baseline",
-      "operational_status": "operational",
+      "minimum_lifecycle_capability": "submit_input",
+      "operational_status": "prepared",
       "file": "templates/input-bugfix-plan.md",
       "sha256": "65885aac10247c1f3e852f08ba32fd41eee2b0251bad380a1802ee7b5b618559"
     },
@@ -175,7 +175,7 @@
     },
     {
       "id": "awr.response.question-blocked",
-      "template_version": 2,
+      "template_version": 3,
       "direction": "response",
       "intent_or_response_type": "question.blocked",
       "applicable_roles": [
@@ -188,7 +188,7 @@
       "minimum_lifecycle_capability": "baseline",
       "operational_status": "operational",
       "file": "templates/response-question-blocked.md",
-      "sha256": "9c600d82e3ba7b506716b0df22aa4bbca255ef822f2faf99830ac056310718c4"
+      "sha256": "fb8c5b3763b6ce1a985a4b1e7496b16c293a9efbb35527be042b5dca22a30f48"
     },
     {
       "id": "awr.response.execution-acknowledged",

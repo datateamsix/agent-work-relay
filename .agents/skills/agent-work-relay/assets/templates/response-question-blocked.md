@@ -15,11 +15,13 @@ awr:
 
 # Blocking questions
 
-Required protocol fields are in the envelope. Required lifecycle evidence: a
-`questions` collection with stable IDs. Do not ask preference questions that
-existing requirements already answer.
+Required protocol fields are in the envelope. The parser reads the
+`questions` collection from `- <id>: <text>` lines. Do not ask preference
+questions that existing requirements already answer.
 
-## q1: <direct question>
+- q1: <direct question>
+
+## q1
 
 **Why this blocks:** <Decision or risk that cannot be resolved safely.>
 

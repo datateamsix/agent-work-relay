@@ -32,6 +32,8 @@ event (`dispatch_execution` / adapter), not a stored decision.
 
 There is no `submit_input` tool on this baseline. Planners transmit
 `feature.plan` and `refinement.plan` through `submit_prompt_for_planning`.
+`bugfix.plan` is a prepared skill intent until that intake exists. Do not
+rewrite it as `feature.plan`.
 
 ## Prepared, not operational until EX-01
 

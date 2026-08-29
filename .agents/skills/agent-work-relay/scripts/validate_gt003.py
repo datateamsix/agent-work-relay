@@ -19,6 +19,7 @@ REQUIRED_FILES = (
     "02-receipt-accepted.response.md",
     "03-plan-completed.response.md",
     "04-plan-approval.decision-request.md",
+    "04-plan-approval.decision.json",
     "05-plan-execute.input.md",
     "06-execution-acknowledged.response.md",
     "07-execution-progress.response.md",
@@ -26,6 +27,7 @@ REQUIRED_FILES = (
     "09-completion-review.input.md",
     "10-review-completed.response.md",
     "11-completion-acceptance.decision-request.md",
+    "11-completion-acceptance.decision.json",
     "12-expected-timeline.json",
     "fixture-ids.json",
 )
@@ -128,6 +130,7 @@ def validate_gt003_fixtures(root: Path | None = None) -> list[str]:
         and ids.get("plan_sha256") != parsed["plan.completed"].content_sha256
     ):
         errors.append("plan_sha256 must equal the plan.completed packet fingerprint.")
+    errors.extend(_validate_decisions(directory, ids, parsed))
     timeline = _load_json(directory / "12-expected-timeline.json")
     if not isinstance(timeline, list) or len(timeline) < 12:
         errors.append("GT-003 expected timeline must list the ordered receipts.")
@@ -143,6 +146,35 @@ def validate_gt003_fixtures(root: Path | None = None) -> list[str]:
             errors.append(f"{path.name} makes an unsupported delivery or MCP claim.")
         if "api.cursor.com" in text:
             errors.append(f"{path.name} contains a live cloud identifier.")
+    return errors
+
+
+def _validate_decisions(directory: Path, ids: dict[str, Any], parsed: dict[str, Any]) -> list[str]:
+    errors: list[str] = []
+    approve = _load_json(directory / "04-plan-approval.decision.json")
+    accept = _load_json(directory / "11-completion-acceptance.decision.json")
+    decision_ids = ids.get("decision_ids")
+    if not isinstance(decision_ids, dict):
+        decision_ids = {}
+    if approve.get("kind") != "approve_plan":
+        errors.append("04-plan-approval.decision.json kind must be approve_plan.")
+    if approve.get("work_order_id") != ids.get("work_order_id"):
+        errors.append("approve_plan work_order_id is inconsistent.")
+    if approve.get("plan_id") != ids.get("plan_id"):
+        errors.append("approve_plan plan_id is inconsistent.")
+    if approve.get("plan_sha256") != ids.get("plan_sha256"):
+        errors.append("approve_plan plan_sha256 must match the plan packet fingerprint.")
+    if approve.get("decision_id") != decision_ids.get("approve_plan"):
+        errors.append("approve_plan decision_id does not match fixture-ids.json.")
+    if accept.get("kind") != "accept_completion":
+        errors.append("11-completion-acceptance.decision.json kind must be accept_completion.")
+    if accept.get("work_order_id") != ids.get("work_order_id"):
+        errors.append("accept_completion work_order_id is inconsistent.")
+    if accept.get("decision_id") != decision_ids.get("accept_completion"):
+        errors.append("accept_completion decision_id does not match fixture-ids.json.")
+    completed = parsed.get("execution.completed")
+    if completed is not None and accept.get("target_sha256") != completed.content_sha256:
+        errors.append("accept_completion target_sha256 must match execution.completed.")
     return errors
 
 

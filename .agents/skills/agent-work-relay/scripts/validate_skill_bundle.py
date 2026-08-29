@@ -152,8 +152,12 @@ def _validate_manifest_and_templates() -> list[str]:
             errors.append(f"{template_id} is baseline but not marked operational.")
         if capability == "ex-01" and status != "prepared":
             errors.append(f"{template_id} must be prepared, not claimed operational, until EX-01.")
+        if capability == "submit_input" and status != "prepared":
+            errors.append(f"{template_id} requires submit_input and must stay prepared.")
         if capability == "as-04":
             errors.append(f"{template_id} must not require AS-04.")
+        if lifecycle == "bugfix.plan" and status == "operational":
+            errors.append("bugfix.plan must not be marked operational on this baseline.")
         if direction == "response":
             errors.extend(_validate_response_template(template_id, envelope, schema))
         if FRONTMATTER_SECRET_RE.search(parsed["text"]):

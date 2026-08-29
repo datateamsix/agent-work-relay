@@ -42,7 +42,10 @@ def test_manifest_ids_unique_and_hashes_match() -> None:
     for item in templates:
         path = SKILL_ROOT / "assets" / item["file"]
         assert item["sha256"] == sha256_file(path)
-        assert item["template_version"] == 2
+        assert item["template_version"] >= 2
+        if item["id"] == "awr.input.bugfix-plan":
+            assert item["operational_status"] == "prepared"
+            assert item["minimum_lifecycle_capability"] == "submit_input"
 
 
 def test_template_reference_routing_and_decorators() -> None:
@@ -66,6 +69,9 @@ def test_template_reference_routing_and_decorators() -> None:
             assert parsed["envelope"]["authority"] == "report_only"
             assert parsed["envelope"]["schema"] == "awr.response/v1"
             assert parsed["envelope"]["in_reply_to"]
+    blocked = (TEMPLATES_DIR / "response-question-blocked.md").read_text(encoding="utf-8")
+    assert "- q1:" in blocked
+    assert "# Blocking questions" in blocked
 
 
 def test_response_templates_align_with_runtime_schema() -> None:
