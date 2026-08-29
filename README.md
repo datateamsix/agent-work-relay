@@ -153,6 +153,8 @@ and copy-ready next-build prompt.
 The ordered implementation packet for small, security-scanned supporting
 artifacts is in
 [docs/CURSOR_SECURE_ARTIFACT_RELAY_BUILD_PROMPTS.md](docs/CURSOR_SECURE_ARTIFACT_RELAY_BUILD_PROMPTS.md).
+Production Cloud Run go-live and the GCP artifact/delivery track are in
+[docs/AWR-AS-04.md](docs/AWR-AS-04.md).
 
 The shared, provider-neutral Agent Skill and generalized `@input` / `@response`
 lifecycle templates are in

@@ -53,9 +53,9 @@ immutable `ArtifactReference`s. Bytes move on authenticated HTTPS
 operate on IDs only: no file bytes, no remote URL fetch, and no ZIP transport.
 The markdown-only `submit_prompt_for_planning` path is unchanged (three ledger
 events). The bundle path records `work_order.accepted` → `bundle.validated` →
-`work_order.routed` → `executor.acknowledged`. Executors receive a manifest of
-references marked `not_delivered`; they never receive artifact bodies in this
-slice.
+`work_order.routed` → `executor.acknowledged`. Until AWR-AS-04, executors
+receive a manifest of references marked `not_delivered`. Production Cloud Run
+must not use the local disk body store; see [AWR-AS-04.md](AWR-AS-04.md).
 
 `awr.response/v1` is defined in this slice with strict discriminator schemas
 for planning and later execution/review packets. Responses are report-only:

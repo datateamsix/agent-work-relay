@@ -408,144 +408,22 @@ work. After approval, commit and push with a normal fast-forward update to the
 operator-authorized branch. Never force-push.
 ```
 
-## Prompt 4 — GCP quarantine, scanning, and executor delivery
+## Prompt 4 — replaced by a two-track packet
 
-Run this after the local security and work-bundle path is complete.
+The original single AS-04 prompt mixed Cloud Run MCP go-live with GCS,
+scanner isolation, and Cursor delivery discovery. That blocked the already
+built hosted MCP server and invited invented delivery modes.
 
-```text
-@awr feature.plan
+Use [docs/AWR-AS-04.md](AWR-AS-04.md):
 
-# AWR-AS-04: GCP artifact security and executor delivery
+1. **AWR-CR-01** — production Cloud Run MCP go-live, Markdown-only, artifact
+   tools fail closed until GCS exists.
+2. **AWR-AS-04** — GCS + isolated scanner + locked Cursor delivery matrix
+   (PNG/JPEG via `prompt.images[].data` only; JSON/YAML/PDF return
+   `DELIVERY_UNSUPPORTED`).
 
-Implement the production GCP artifact path and capability-aware executor
-delivery for Agent Work Relay.
-
-Repository:
-https://github.com/datateamsix/agent-work-relay
-
-GCP target:
-- project: modelready-m3
-- region: us-central1
-- broker service: agent-work-relay
-- broker identity: awr-runtime@modelready-m3.iam.gserviceaccount.com
-- state: existing Firestore (default) database using dedicated awr_ collections
-
-Read before planning:
-- AGENTS.md
-- README.md
-- docs/ARCHITECTURE.md
-- docs/LIVE_PROTOTYPE.md
-- docs/CURSOR_PRODUCT_SUMMARY_AND_CLOUD_RUN_BUILD.md
-- docs/CURSOR_SECURE_ARTIFACT_RELAY_BUILD_PROMPTS.md
-- all merged AWR-AS-01 through AWR-AS-03 code and tests
-
-Begin in planning mode. Inspect the deployed architecture and current Cursor
-Cloud Agents API documentation. Verify whether the current API supports native
-file attachments, authenticated artifact URLs, or only text prompts and
-repository content. Do not invent provider capabilities. If no secure delivery
-mode exists for an allowed artifact, fail explicitly with
-DELIVERY_UNSUPPORTED rather than silently omitting it.
-
-GCP storage boundary:
-- Implement GCSArtifactBodyStore behind the existing ArtifactBodyStore port.
-- Use private, independently permissioned quarantine and clean storage areas;
-  prefer separate buckets when that materially improves IAM isolation.
-- Use immutable object names derived from server IDs or content digests.
-- Use object-generation preconditions for create, promote/copy, read, and
-  delivery operations.
-- Enable uniform bucket-level access, public-access prevention, encryption at
-  rest, lifecycle deletion, and retention settings appropriate for temporary
-  work artifacts.
-- Do not store binary bodies in Firestore.
-- Do not grant AWR access to PreM3 product buckets or datasets.
-
-Scanner boundary:
-- Run scanning under a dedicated narrowly privileged identity, separate from
-  the broker runtime where practical.
-- The broker may create quarantine objects and read clean artifacts.
-- The scanner may read quarantine and create clean objects but must not mutate
-  work-order authority or invoke executors.
-- No executor may read quarantine.
-- Keep malware signature updates reproducible and observable. Record engine and
-  signature versions in each security receipt.
-- Bound CPU, memory, duration, and concurrency. A timeout or infrastructure
-  failure is a rejection in enforce mode.
-- Use Cloud Tasks, Eventarc, or another durable mechanism only after comparing
-  its delivery and idempotency behavior with the existing state machine. Do not
-  rely on an in-memory background task.
-
-Executor delivery:
-- Add typed executor artifact capabilities and a deterministic delivery-policy
-  selector.
-- Prefer, in order: native provider attachment, short-lived access to an exact
-  clean object generation, or isolated temporary workspace materialization.
-- Do not create a permanent AWR folder in destination repositories.
-- If Cursor can only access repository content, design a temporary handoff
-  branch or equivalent isolated mechanism. Never put delivery artifacts on main
-  merely to make them visible to an agent.
-- Normalize filenames during materialization and verify the SHA-256 after the
-  destination write.
-- The wrapper must name every expected artifact and fingerprint. The executor
-  acknowledgement must identify which artifact fingerprints were made
-  available.
-- Signed access must be short-lived, scoped to one clean object generation, and
-  excluded from logs and durable prompts where the provider would retain it
-  beyond the security window. Document the chosen tradeoff.
-
-Receipts and reconciliation:
-- Emit artifact.relayed with executor, delivery method, object generation or
-  staging reference, and SHA-256, excluding bearer credentials.
-- Capture artifact.delivery_acknowledged when the executor can prove access.
-- Treat a missing or mismatched acknowledgement as an incomplete dispatch that
-  reconciliation can retry safely.
-- Reconciliation must not duplicate Cursor agents, runs, staged branches, or
-  artifact receipts.
-
-Production security:
-- Authenticate every artifact and work-bundle endpoint.
-- Apply least-privilege IAM to broker, scanner, and operator identities.
-- Keep buckets private and reject public ACLs.
-- Never expose quarantine objects through signed URLs.
-- Redact signed URLs, raw prompts, extracted bodies, and secrets from logs and
-  exception responses.
-- Add metrics for scan duration, rejection reason, scanner errors, quarantine
-  age, clean-artifact age, dispatch latency, and unacknowledged delivery.
-
-Tests and proof must include:
-- deterministic GCS test doubles or emulator-style conformance tests;
-- object-generation substitution and race-condition tests;
-- IAM/deployment configuration review or policy tests;
-- malicious, unsupported, tampered, oversized, and scanner-unavailable cases;
-- clean JSON, YAML, PNG/JPEG, and constrained PDF delivery cases;
-- executor capability mismatch returning DELIVERY_UNSUPPORTED;
-- crash/retry reconciliation without duplicate delivery or Cursor runs;
-- no artifact bytes or credentials in Firestore, logs, or ledger payloads;
-- the complete existing test suite and AWR-GT-001; and
-- a new AWR-GT-002 secure-artifact relay proof using non-sensitive fixtures.
-
-AWR-GT-002 should demonstrate one clean image or structured-data artifact,
-its quarantine and scan receipts, immutable promotion, bundle validation,
-Cursor delivery or a provider-faithful recording adapter, executor
-acknowledgement, plan return, and exact fingerprint reconciliation. It should
-also demonstrate one EICAR rejection and one unsupported ZIP rejection without
-dispatching an executor.
-
-Do not add ZIP support, generic file sharing, code-execution authority, public
-buckets, a dashboard, or changes to PreM3 runtime resources.
-
-Before completion run formatting, linting, strict mypy, the full test suite,
-package build, local scanner tests, GCS conformance tests, container smoke tests,
-AWR-GT-001, and AWR-GT-002. Deploy only when the operator has authenticated
-GCP and explicitly authorized infrastructure changes.
-
-Return a completion packet containing branch and commit, files changed,
-architecture and threat-model decisions, dependency inventory, IAM resources,
-bucket names and retention without credentials, scanner engine/signature
-version, tests and exact results, deployment revision if applicable, complete
-AWR-GT-002 receipt timelines, known limitations, and rollback instructions.
-After approval, commit and push with a normal fast-forward update to the
-operator-authorized branch. Never force-push or delete operator data.
-```
+Copy the prompts from that document. Do not re-open Cursor capability
+discovery. Do not materialize artifacts onto destination repositories.
 
 ## Definition of done for the four-prompt milestone
 
