@@ -1,0 +1,12 @@
+{
+  "mcp": {
+    "allowed": ["agent-work-relay"]
+  },
+  "mcpServers": {
+    "agent-work-relay": {
+      "httpUrl": "https://YOUR-AWR-SERVICE/mcp",
+      "authProviderType": "dynamic_discovery",
+      "trust": false
+    }
+  }
+}

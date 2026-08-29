@@ -1,0 +1,12 @@
+interface:
+  display_name: "Agent Work Relay"
+  short_description: "Pass product work directly between AI agents"
+  default_prompt: "Use $agent-work-relay to relay this product-development work to the appropriate agent."
+dependencies:
+  tools:
+    - type: "mcp"
+      value: "agent-work-relay"
+      description: "Authenticated AWR MCP server for durable agent handoffs"
+      transport: "streamable_http"
+policy:
+  allow_implicit_invocation: true

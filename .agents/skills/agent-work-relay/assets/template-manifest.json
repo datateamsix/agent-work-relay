@@ -1,0 +1,23 @@
+{
+  "bundle": "agent-work-relay",
+  "protocol": "awr/v1",
+  "decorators": ["@input", "@response"],
+  "templates": [
+    {"id": "awr.input.feature-plan", "version": 1, "file": "templates/input-feature-plan.md"},
+    {"id": "awr.input.bugfix-plan", "version": 1, "file": "templates/input-bugfix-plan.md"},
+    {"id": "awr.input.refinement-plan", "version": 1, "file": "templates/input-refinement-plan.md"},
+    {"id": "awr.input.plan-revise", "version": 1, "file": "templates/input-plan-revise.md"},
+    {"id": "awr.input.plan-execute", "version": 1, "file": "templates/input-plan-execute.md"},
+    {"id": "awr.input.question-answer", "version": 1, "file": "templates/input-question-answer.md"},
+    {"id": "awr.input.implementation-refine", "version": 1, "file": "templates/input-implementation-refine.md"},
+    {"id": "awr.input.completion-review", "version": 1, "file": "templates/input-completion-review.md"},
+    {"id": "awr.response.receipt-accepted", "version": 1, "file": "templates/response-receipt-accepted.md"},
+    {"id": "awr.response.plan-completed", "version": 1, "file": "templates/response-plan-completed.md"},
+    {"id": "awr.response.question-blocked", "version": 1, "file": "templates/response-question-blocked.md"},
+    {"id": "awr.response.execution-acknowledged", "version": 1, "file": "templates/response-execution-acknowledged.md"},
+    {"id": "awr.response.execution-progress", "version": 1, "file": "templates/response-execution-progress.md"},
+    {"id": "awr.response.execution-completed", "version": 1, "file": "templates/response-execution-completed.md"},
+    {"id": "awr.response.execution-failed", "version": 1, "file": "templates/response-execution-failed.md"},
+    {"id": "awr.response.review-completed", "version": 1, "file": "templates/response-review-completed.md"}
+  ]
+}

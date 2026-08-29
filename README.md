@@ -154,6 +154,13 @@ The ordered implementation packet for small, security-scanned supporting
 artifacts is in
 [docs/CURSOR_SECURE_ARTIFACT_RELAY_BUILD_PROMPTS.md](docs/CURSOR_SECURE_ARTIFACT_RELAY_BUILD_PROMPTS.md).
 
+The shared, provider-neutral Agent Skill and generalized `@input` / `@response`
+lifecycle templates are in
+[`.agents/skills/agent-work-relay/`](.agents/skills/agent-work-relay/) and
+[docs/AGENT_WORK_RELAY_SKILLS_BUNDLE.md](docs/AGENT_WORK_RELAY_SKILLS_BUNDLE.md).
+Keep the project-level skill in destination repositories so remote coding agents
+can discover the same relay protocol used by planning and review agents.
+
 ## MCP tool
 
 The MCP server exposes four tools:

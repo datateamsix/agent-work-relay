@@ -1,0 +1,7 @@
+{
+  "mcpServers": {
+    "agent-work-relay": {
+      "url": "${env:AWR_MCP_URL}"
+    }
+  }
+}
