@@ -214,6 +214,22 @@ class KernelGuardTests(unittest.TestCase):
         with self.assertRaises(TransitionError):
             next_state(WorkStatus.WAITING_FOR_HUMAN_REVIEW, LifecycleEvent.QUESTION_ANSWER)
 
+    def test_empty_decision_principals_fail_closed(self) -> None:
+        snapshot = replace(
+            derive_snapshot("AWR-1", "human:owner", "cursor:worker", SOURCE),
+            plan_id="PLAN-1",
+            plan_sha256=PLAN_SHA,
+            decision_principals=frozenset(),
+            executor_principals=frozenset(),
+        )
+        with self.assertRaisesRegex(AuthorityError, "decision principal"):
+            apply_decision(
+                status=WorkStatus.WAITING_FOR_PLAN_APPROVAL,
+                snapshot=snapshot,
+                event=LifecycleEvent.APPROVE_PLAN,
+                decision=_approval(),
+            )
+
     def test_executor_identities_cannot_record_decisions(self) -> None:
         snapshot = replace(
             derive_snapshot("AWR-1", "human:owner", "cursor:worker", SOURCE),

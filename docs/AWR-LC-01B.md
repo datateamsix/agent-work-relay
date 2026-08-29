@@ -70,12 +70,17 @@ Recipient, bound-agent, and other executor identities are rejected.
 
 ## Reads
 
-`get_work_order` and `list_pending_actions` authorize the resolved actor as a
-work-order participant. `list_pending_actions` without `work_order_id` scans
-work orders the actor may read; calling it with neither an actor nor a work
-order ID is an error, not an empty list. `get_plan`, timeline, and artifact
-projections apply the same participant check when an explicit actor is
-supplied.
+`get_work_order` and `list_pending_actions` authorize the explicit actor when
+one is supplied, otherwise the authenticated principal, as a work-order
+participant. HTTP GET `/v1/work-orders/{id}` and `/pending` accept `sender`.
+`list_pending_actions` without `work_order_id` scans work orders the actor may
+read; calling it with neither an actor nor a work order ID is an error, not an
+empty list. `get_plan`, timeline, and artifact projections apply the same
+participant check when an explicit actor is supplied.
+
+Stored snapshots that predate principal fields hydrate `decision_principals`
+from the work-order sender and `executor_principals` from the recipient. The
+kernel fails closed if those sets are empty.
 
 Removed convenience edges include `PLAN_READY` → approve or execute,
 `READY_FOR_EXECUTION` → `EXECUTING`, `plan.execute` → `EXECUTING`,

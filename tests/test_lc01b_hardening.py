@@ -6,6 +6,8 @@ from datetime import UTC, datetime, timedelta
 
 from lc01b_helpers import FEATURE, RECIPIENT, REPOSITORY, SENDER, LifecycleHarness, plan_payload
 
+from awr.auth.context import reset_current_principal, set_current_principal
+from awr.auth.tokens import Principal
 from awr.contracts import WorkAction, WorkKind, WorkOrder, WorkStatus
 from awr.decorators import parse_directive
 from awr.executors.recording_cursor import RecordingCursorExecutor
@@ -129,6 +131,60 @@ class AuthorizationHardeningTests(unittest.TestCase):
                 permitted_action="plan.execute",
                 rationale="Executor identities cannot approve.",
             )
+
+    def test_explicit_reader_wins_over_oauth_principal(self) -> None:
+        principal = Principal("static-operator", "awr-static", frozenset({"awr:read"}), {})
+        token = set_current_principal(principal)
+        try:
+            with self.assertRaisesRegex(WorkOrderValidationError, "not authorized"):
+                self.harness.service.get_work_order(self.work_order_id)
+            projection = self.harness.service.get_work_order(self.work_order_id, actor=SENDER)
+            self.assertEqual(projection["status"], WorkStatus.PLANNING.value)
+            pending = self.harness.service.list_pending_actions(self.work_order_id, actor=SENDER)
+            self.assertEqual(pending, [])
+            with self.assertRaisesRegex(WorkOrderValidationError, "not authorized"):
+                self.harness.service.get_work_order(self.work_order_id, actor=STRANGER)
+        finally:
+            reset_current_principal(token)
+
+    def test_legacy_snapshot_hydrates_principals_and_rejects_executor(self) -> None:
+        self.harness.submit(
+            response_type=ResponseType.PLAN_COMPLETED,
+            work_order_id=self.work_order_id,
+            payload=plan_payload(),
+            actor=RECIPIENT,
+            idempotency_key="legacy-plan",
+        )
+        self.harness.service.request_plan_approval(self.work_order_id, actor=SENDER)
+        with self.harness.store.lock_work_order(self.work_order_id) as session:
+            raw = session.get_lifecycle()
+            assert raw is not None
+            raw.pop("decision_principals", None)
+            raw.pop("executor_principals", None)
+            session.put_lifecycle(raw)
+        lifecycle = self.harness.projection(self.work_order_id)["lifecycle"]
+        with self.assertRaisesRegex(WorkOrderValidationError, "cannot record human decisions"):
+            self.harness.service.record_decision(
+                decision_type="approve_plan",
+                work_order_id=self.work_order_id,
+                actor=RECIPIENT,
+                target_id=str(lifecycle["plan_id"]),
+                target_sha256=str(lifecycle["plan_sha256"]),
+                idempotency_key="legacy-executor-approve",
+                permitted_action="plan.execute",
+                rationale="Legacy snapshots must still reject executors.",
+            )
+        approved = self.harness.service.record_decision(
+            decision_type="approve_plan",
+            work_order_id=self.work_order_id,
+            actor=SENDER,
+            target_id=str(lifecycle["plan_id"]),
+            target_sha256=str(lifecycle["plan_sha256"]),
+            idempotency_key="legacy-sender-approve",
+            permitted_action="plan.execute",
+            rationale="Hydrated sender remains the decision principal.",
+        )
+        self.assertEqual(approved["status"], WorkStatus.READY_FOR_EXECUTION.value)
 
     def test_bound_agent_cannot_record_human_decisions(self) -> None:
         self.harness.submit(

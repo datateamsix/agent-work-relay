@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+from dataclasses import replace
 from datetime import UTC, datetime
 from typing import Any, BinaryIO
 from urllib.parse import urlparse
@@ -423,7 +424,7 @@ class BrokerService:
 
     def get_work_order(self, work_order_id: str, *, actor: str | None = None) -> dict[str, Any]:
         work_order = self._require_work_order(work_order_id)
-        resolved = self._actor(actor)
+        resolved = self._read_actor(actor)
         with self.store.lock_work_order(work_order_id) as session:
             snapshot = self._snapshot_from_session(session, work_order)
             self._authorize_reader(resolved, work_order, snapshot)
@@ -445,13 +446,13 @@ class BrokerService:
     def list_pending_actions(
         self, work_order_id: str | None = None, *, actor: str | None = None
     ) -> list[dict[str, Any]]:
-        resolved = self._actor(actor)
         if work_order_id is not None:
-            projection = self.get_work_order(work_order_id, actor=resolved)
+            projection = self.get_work_order(work_order_id, actor=actor)
             return [
                 {**item, "work_order_id": work_order_id, "status": projection["status"]}
                 for item in projection["pending_actions"]
             ]
+        resolved = self._read_actor(actor)
         pending: list[dict[str, Any]] = []
         for work_order in self.store.list_work_orders():
             try:
@@ -821,18 +822,31 @@ class BrokerService:
         work_order = self._require_work_order(work_order_id)
         if actor is None:
             return work_order
-        resolved = self._actor(actor)
+        resolved = self._read_actor(actor)
         with self.store.lock_work_order(work_order_id) as session:
             snapshot = self._snapshot_from_session(session, work_order)
             self._authorize_reader(resolved, work_order, snapshot)
         return work_order
+
+    def _read_actor(self, explicit: str | None) -> str:
+        if explicit:
+            return explicit
+        return self._actor(None)
 
     def _snapshot_from_session(
         self, session: WorkOrderSession, work_order: WorkOrder
     ) -> LifecycleSnapshot:
         raw = session.get_lifecycle()
         if raw is not None:
-            return LifecycleSnapshot.from_dict(raw)
+            snapshot = LifecycleSnapshot.from_dict(raw)
+            if snapshot.decision_principals and snapshot.executor_principals:
+                return snapshot
+            return replace(
+                snapshot,
+                decision_principals=snapshot.decision_principals or frozenset({work_order.sender}),
+                executor_principals=snapshot.executor_principals
+                or frozenset({work_order.recipient}),
+            )
         return derive_snapshot(
             work_order.work_order_id,
             work_order.sender,

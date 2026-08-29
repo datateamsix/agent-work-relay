@@ -324,7 +324,7 @@ def _assert_actor(actor: str, snapshot: LifecycleSnapshot) -> None:
 def _assert_decision_principal(actor: str, snapshot: LifecycleSnapshot) -> None:
     if actor == snapshot.bound_agent_id or actor in snapshot.executor_principals:
         raise AuthorityError("Executor identities cannot record human decisions.")
-    if snapshot.decision_principals and actor not in snapshot.decision_principals:
+    if actor not in snapshot.decision_principals:
         raise AuthorityError("Only a decision principal may record human decisions.")
 
 

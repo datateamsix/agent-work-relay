@@ -138,16 +138,16 @@ def create_app(service: BrokerService) -> Any:
             return JSONResponse({"error": str(exc)}, status_code=400)
 
     @app.get("/v1/work-orders/{work_order_id}")
-    def get_work_order(work_order_id: str) -> Any:
+    def get_work_order(work_order_id: str, sender: str | None = None) -> Any:
         try:
-            return service.get_work_order(work_order_id)
+            return service.get_work_order(work_order_id, actor=sender)
         except WorkOrderValidationError as exc:
             return JSONResponse({"error": str(exc)}, status_code=400)
 
     @app.get("/v1/work-orders/{work_order_id}/pending")
-    def list_pending(work_order_id: str) -> Any:
+    def list_pending(work_order_id: str, sender: str | None = None) -> Any:
         try:
-            return service.list_pending_actions(work_order_id)
+            return service.list_pending_actions(work_order_id, actor=sender)
         except WorkOrderValidationError as exc:
             return JSONResponse({"error": str(exc)}, status_code=400)
 
