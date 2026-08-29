@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 from .canonical import fingerprint_packet
 from .contracts import (
     RENDER_TEMPLATE_ID,
@@ -27,6 +29,11 @@ def render_response_markdown(packet: ResponsePacket) -> str:
         fields.append(f"  executor_run_id: {packet.executor_run_id}")
     if packet.correlation_id:
         fields.append(f"  correlation_id: {packet.correlation_id}")
+    if packet.evidence_refs:
+        fields.append(
+            "  evidence_refs: "
+            + json.dumps([item.to_dict() for item in packet.evidence_refs], separators=(",", ":"))
+        )
     fields.extend(_payload_fields(packet))
     body = _body(packet)
     return "@response\n---\nawr:\n" + "\n".join(fields) + "\n---\n\n" + body + "\n"

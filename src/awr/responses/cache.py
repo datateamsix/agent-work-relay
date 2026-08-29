@@ -56,5 +56,34 @@ def etag_for_digest(digest: str) -> str:
     return f'"sha256:{digest}"'
 
 
+def response_idempotency_cache_key(
+    *,
+    actor: str,
+    operation: str,
+    idempotency_key: str,
+    packet_fingerprint: str,
+) -> str:
+    """Durable response replay key. Caching cannot bypass validation."""
+    return _digest(
+        (
+            "response-idempotency",
+            actor,
+            operation,
+            idempotency_key,
+            packet_fingerprint.removeprefix("sha256:"),
+        )
+    )
+
+
+def provider_run_cache_key(
+    *,
+    provider: str,
+    agent_id: str,
+    run_id: str,
+    last_known_version: str,
+) -> str:
+    return _digest(("provider-run", provider, agent_id, run_id, last_known_version))
+
+
 def _digest(parts: tuple[str, ...]) -> str:
     return fingerprint_bytes("|".join(parts).encode("utf-8"))

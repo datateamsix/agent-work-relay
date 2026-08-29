@@ -154,6 +154,66 @@ def create_server(service: BrokerService | None = None) -> Any:
     def get_work_order_artifacts(work_order_id: str) -> list[dict[str, Any]]:
         return broker.get_work_order_artifacts(work_order_id)
 
+    @server.tool(
+        name="submit_response",
+        title="Submit response",
+        description="Accept an @response packet. Responses never grant authority.",
+        meta=_security_meta("awr:response"),
+    )
+    def submit_response(markdown: str, sender: str | None = None) -> dict[str, Any]:
+        return broker.submit_response(markdown=markdown, actor=sender)
+
+    @server.tool(
+        name="record_decision",
+        title="Record decision",
+        description="Record an authenticated approval, rejection, cancellation, or closure.",
+        meta=_security_meta("awr:decide"),
+    )
+    def record_decision(
+        decision_type: str,
+        work_order_id: str,
+        target_id: str,
+        target_sha256: str,
+        idempotency_key: str,
+        permitted_action: str,
+        sender: str | None = None,
+        scope: str = "restricted",
+        target_kind: str = "plan",
+        expected_version: int | None = None,
+    ) -> dict[str, Any]:
+        return broker.record_decision(
+            decision_type=decision_type,
+            work_order_id=work_order_id,
+            actor=sender,
+            target_id=target_id,
+            target_sha256=target_sha256,
+            idempotency_key=idempotency_key,
+            permitted_action=permitted_action,
+            scope=scope,
+            target_kind=target_kind,
+            expected_version=expected_version,
+        )
+
+    @server.tool(
+        name="list_pending_actions",
+        title="List pending actions",
+        description="List approvals, reviews, or work waiting on an authorized participant.",
+        meta=_security_meta("awr:read"),
+    )
+    def list_pending_actions(
+        work_order_id: str | None = None, sender: str | None = None
+    ) -> list[dict[str, Any]]:
+        return broker.list_pending_actions(work_order_id, actor=sender)
+
+    @server.tool(
+        name="get_work_order",
+        title="Get work order",
+        description="Return the current projection, immutable refs, and pending actions.",
+        meta=_security_meta("awr:read"),
+    )
+    def get_work_order(work_order_id: str, sender: str | None = None) -> dict[str, Any]:
+        return broker.get_work_order(work_order_id, actor=sender)
+
     return server
 
 

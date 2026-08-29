@@ -234,6 +234,32 @@ class _FirestoreWorkOrderSession:
         self._base_sequence = max((entry.sequence for entry in ledger), default=0)
         self._pending_status: WorkStatus | None = None
         self._pending_entries: list[LedgerEntry] = []
+        self._pending_packets: list[dict[str, Any]] = []
+        self._pending_decisions: list[dict[str, Any]] = []
+        self._pending_lifecycle: dict[str, Any] | None = None
+        self._lifecycle: dict[str, Any] | None = self._load_lifecycle()
+        self._decisions: list[dict[str, Any]] = self._load_decisions()
+
+    def _responses_collection(self) -> Any:
+        return self._store._work_order_ref(self._work_order.work_order_id).collection("responses")
+
+    def _decisions_collection(self) -> Any:
+        return self._store._work_order_ref(self._work_order.work_order_id).collection("decisions")
+
+    def _lifecycle_ref(self) -> Any:
+        return self._store._work_order_ref(self._work_order.work_order_id).collection("lifecycle").document(
+            "snapshot"
+        )
+
+    def _load_lifecycle(self) -> dict[str, Any] | None:
+        snapshot = self._lifecycle_ref().get()
+        if not snapshot.exists:
+            return None
+        data = snapshot.to_dict() or {}
+        return data if isinstance(data, dict) else None
+
+    def _load_decisions(self) -> list[dict[str, Any]]:
+        return [item.to_dict() or {} for item in self._decisions_collection().stream()]
 
     def get_work_order(self) -> WorkOrder:
         return self._work_order
@@ -265,8 +291,53 @@ class _FirestoreWorkOrderSession:
         self._ledger.append(entry)
         return entry
 
+    def put_response_packet(self, packet: dict[str, Any]) -> None:
+        self._pending_packets.append(packet)
+
+    def get_response_by_idempotency(
+        self, actor: str, response_type: str, idempotency_key: str
+    ) -> dict[str, Any] | None:
+        for item in self._pending_packets:
+            if (
+                item.get("actor") == actor
+                and item.get("response_type") == response_type
+                and item.get("idempotency_key") == idempotency_key
+            ):
+                return {"packet": item["packet"], "content_sha256": item["content_sha256"]}
+        for snapshot in self._responses_collection().stream():
+            data = snapshot.to_dict() or {}
+            if (
+                data.get("actor") == actor
+                and data.get("response_type") == response_type
+                and data.get("idempotency_key") == idempotency_key
+            ):
+                packet = data.get("packet")
+                if isinstance(packet, dict):
+                    return {"packet": packet, "content_sha256": str(data.get("content_sha256") or "")}
+        return None
+
+    def put_decision(self, decision: dict[str, Any]) -> None:
+        self._pending_decisions.append(decision)
+        self._decisions.append(decision)
+
+    def list_decisions(self) -> list[dict[str, Any]]:
+        return list(self._decisions)
+
+    def put_lifecycle(self, snapshot: dict[str, Any]) -> None:
+        self._pending_lifecycle = snapshot
+        self._lifecycle = snapshot
+
+    def get_lifecycle(self) -> dict[str, Any] | None:
+        return None if self._lifecycle is None else dict(self._lifecycle)
+
     def commit(self) -> None:
-        if self._pending_status is None and not self._pending_entries:
+        if (
+            self._pending_status is None
+            and not self._pending_entries
+            and not self._pending_packets
+            and not self._pending_decisions
+            and self._pending_lifecycle is None
+        ):
             return
 
         def txn(transaction: Any) -> None:
@@ -312,6 +383,18 @@ class _FirestoreWorkOrderSession:
                     ),
                     _ledger_to_doc(entry),
                 )
+            for packet in self._pending_packets:
+                transaction.set(
+                    self._responses_collection().document(str(packet["packet_id"])),
+                    packet,
+                )
+            for decision in self._pending_decisions:
+                transaction.set(
+                    self._decisions_collection().document(str(decision["decision_id"])),
+                    decision,
+                )
+            if self._pending_lifecycle is not None:
+                transaction.set(self._lifecycle_ref(), self._pending_lifecycle)
 
         self._store._run_transaction(txn)
 

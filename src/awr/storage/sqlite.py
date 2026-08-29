@@ -63,6 +63,45 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_ledger_unique_bundle_validated
 ON ledger(work_order_id) WHERE event_type = 'bundle.validated';
 """
 
+_LIFECYCLE_SCHEMA = """
+CREATE TABLE IF NOT EXISTS response_packets (
+    packet_id TEXT PRIMARY KEY,
+    work_order_id TEXT NOT NULL,
+    response_type TEXT NOT NULL,
+    actor TEXT NOT NULL,
+    idempotency_key TEXT NOT NULL,
+    content_sha256 TEXT NOT NULL,
+    in_reply_to TEXT NOT NULL,
+    source_input_sha256 TEXT NOT NULL,
+    packet_json TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    UNIQUE (actor, response_type, idempotency_key),
+    FOREIGN KEY (work_order_id) REFERENCES work_orders(work_order_id)
+);
+
+CREATE TABLE IF NOT EXISTS decisions (
+    decision_id TEXT PRIMARY KEY,
+    work_order_id TEXT NOT NULL,
+    decision_type TEXT NOT NULL,
+    actor TEXT NOT NULL,
+    target_kind TEXT NOT NULL,
+    target_id TEXT NOT NULL,
+    target_sha256 TEXT NOT NULL,
+    permitted_action TEXT NOT NULL,
+    scope TEXT NOT NULL,
+    idempotency_key TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    UNIQUE (actor, decision_type, idempotency_key),
+    FOREIGN KEY (work_order_id) REFERENCES work_orders(work_order_id)
+);
+
+CREATE TABLE IF NOT EXISTS lifecycle_snapshots (
+    work_order_id TEXT PRIMARY KEY,
+    snapshot_json TEXT NOT NULL,
+    FOREIGN KEY (work_order_id) REFERENCES work_orders(work_order_id)
+);
+"""
+
 _ARTIFACT_SCHEMA = """
 CREATE TABLE IF NOT EXISTS artifacts (
     artifact_id TEXT PRIMARY KEY,
@@ -212,6 +251,7 @@ class SQLiteStateStore:
         )
         connection.executescript(_ARTIFACT_SCHEMA)
         SQLiteStateStore._migrate_artifact_columns(connection)
+        connection.executescript(_LIFECYCLE_SCHEMA)
 
     @staticmethod
     def _migrate_artifact_columns(connection: sqlite3.Connection) -> None:
@@ -496,3 +536,105 @@ class _SQLiteWorkOrderSession:
             counterparty,
             payload,
         )
+
+    def put_response_packet(self, packet: dict[str, Any]) -> None:
+        self._connection.execute(
+            """
+            INSERT INTO response_packets (
+                packet_id, work_order_id, response_type, actor, idempotency_key,
+                content_sha256, in_reply_to, source_input_sha256, packet_json, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                str(packet["packet_id"]),
+                self._work_order_id,
+                str(packet["response_type"]),
+                str(packet["actor"]),
+                str(packet["idempotency_key"]),
+                str(packet["content_sha256"]),
+                str(packet["in_reply_to"]),
+                str(packet["source_input_sha256"]),
+                json.dumps(packet["packet"], sort_keys=True, separators=(",", ":")),
+                str(packet["created_at"]),
+            ),
+        )
+
+    def get_response_by_idempotency(
+        self, actor: str, response_type: str, idempotency_key: str
+    ) -> dict[str, Any] | None:
+        row = self._connection.execute(
+            """
+            SELECT packet_json, content_sha256 FROM response_packets
+            WHERE work_order_id = ? AND actor = ? AND response_type = ? AND idempotency_key = ?
+            """,
+            (self._work_order_id, actor, response_type, idempotency_key),
+        ).fetchone()
+        if row is None:
+            return None
+        return {"packet": json.loads(row["packet_json"]), "content_sha256": row["content_sha256"]}
+
+    def put_decision(self, decision: dict[str, Any]) -> None:
+        self._connection.execute(
+            """
+            INSERT INTO decisions (
+                decision_id, work_order_id, decision_type, actor, target_kind, target_id,
+                target_sha256, permitted_action, scope, idempotency_key, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                str(decision["decision_id"]),
+                self._work_order_id,
+                str(decision["decision_type"]),
+                str(decision["actor"]),
+                str(decision["target_kind"]),
+                str(decision["target_id"]),
+                str(decision["target_sha256"]),
+                str(decision["permitted_action"]),
+                str(decision["scope"]),
+                str(decision["idempotency_key"]),
+                str(decision["created_at"]),
+            ),
+        )
+
+    def list_decisions(self) -> list[dict[str, Any]]:
+        rows = self._connection.execute(
+            "SELECT * FROM decisions WHERE work_order_id = ? ORDER BY created_at",
+            (self._work_order_id,),
+        ).fetchall()
+        return [
+            {
+                "decision_id": row["decision_id"],
+                "decision_type": row["decision_type"],
+                "work_order_id": row["work_order_id"],
+                "actor": row["actor"],
+                "target_kind": row["target_kind"],
+                "target_id": row["target_id"],
+                "target_sha256": row["target_sha256"],
+                "permitted_action": row["permitted_action"],
+                "scope": row["scope"],
+                "created_at": row["created_at"],
+                "idempotency_key": row["idempotency_key"],
+            }
+            for row in rows
+        ]
+
+    def put_lifecycle(self, snapshot: dict[str, Any]) -> None:
+        encoded = json.dumps(snapshot, sort_keys=True, separators=(",", ":"))
+        self._connection.execute(
+            """
+            INSERT INTO lifecycle_snapshots (work_order_id, snapshot_json)
+            VALUES (?, ?)
+            ON CONFLICT(work_order_id) DO UPDATE SET snapshot_json = excluded.snapshot_json
+            """,
+            (self._work_order_id, encoded),
+        )
+
+    def get_lifecycle(self) -> dict[str, Any] | None:
+        row = self._connection.execute(
+            "SELECT snapshot_json FROM lifecycle_snapshots WHERE work_order_id = ?",
+            (self._work_order_id,),
+        ).fetchone()
+        if row is None:
+            return None
+        loaded = json.loads(row["snapshot_json"])
+        return loaded if isinstance(loaded, dict) else None

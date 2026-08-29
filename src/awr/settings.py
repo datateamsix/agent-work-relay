@@ -9,17 +9,21 @@ RuntimeEnv = Literal["local", "test", "production"]
 SecurityMode = Literal["enforce"]
 SecurityScannerKind = Literal["clamav", "fake_clean", "fake_eicar"]
 
-AWR_SCOPES = ("awr:plan", "awr:read", "awr:refresh")
+AWR_SCOPES = ("awr:plan", "awr:read", "awr:refresh", "awr:response", "awr:decide")
 TOOL_SCOPES = {
     "submit_prompt_for_planning": "awr:plan",
     "refresh_planning": "awr:refresh",
     "get_plan": "awr:read",
+    "get_work_order": "awr:read",
     "get_work_order_timeline": "awr:read",
+    "list_pending_actions": "awr:read",
     "begin_artifact_intake": "awr:plan",
     "finalize_artifact_upload": "awr:plan",
     "get_artifact_status": "awr:read",
     "submit_work_bundle_for_planning": "awr:plan",
     "get_work_order_artifacts": "awr:read",
+    "submit_response": "awr:response",
+    "record_decision": "awr:decide",
 }
 
 

@@ -12,7 +12,7 @@ from .artifacts.bundle import (
     resolve_bundle,
     verify_bundle_generation,
 )
-from .artifacts.contracts import WorkBundle
+from .artifacts.contracts import ArtifactStatus, WorkBundle
 from .artifacts.relay import ArtifactRelay
 from .auth.context import resolve_actor
 from .contracts import (
@@ -27,7 +27,21 @@ from .contracts import (
 )
 from .decorators import parse_directive
 from .executors.base import PlanningExecutor
-from .responses.cache import replay_cache_key
+from .lifecycle.decisions import DecisionTargetKind, DecisionType, StoredDecision
+from .lifecycle.errors import IdempotencyConflict, LifecycleError
+from .lifecycle.events import LifecycleEvent
+from .lifecycle.kernel import (
+    LifecycleSnapshot,
+    apply_broker_event,
+    apply_decision,
+    apply_response,
+    derive_snapshot,
+)
+from .lifecycle.pending import pending_actions
+from .responses.cache import replay_cache_key, response_idempotency_cache_key
+from .responses.canonical import ResponsePacketError, fingerprint_packet
+from .responses.contracts import RESPONSE_AUTHORITY, ResponsePacket
+from .responses.validate import parse_response_markdown
 from .storage.base import StateStore, WorkOrderSession
 from .wrappers import WrappedPrompt, wrap_prompt
 
@@ -396,6 +410,382 @@ class BrokerService:
     def get_work_order_timeline(self, work_order_id: str) -> list[dict[str, Any]]:
         self._require_work_order(work_order_id)
         return [entry.to_dict() for entry in self.store.list_ledger(work_order_id)]
+
+    def get_work_order(self, work_order_id: str, *, actor: str | None = None) -> dict[str, Any]:
+        work_order = self._require_work_order(work_order_id)
+        if actor is not None:
+            self._actor(actor)
+        with self.store.lock_work_order(work_order_id) as session:
+            snapshot = self._snapshot_from_session(session, work_order)
+            decisions = [StoredDecision.from_dict(item) for item in session.list_decisions()]
+        return {
+            **work_order.to_dict(),
+            "kind": work_order.kind.value,
+            "action": work_order.action.value,
+            "status": work_order.status.value,
+            "lifecycle": snapshot.to_dict(),
+            "pending_actions": pending_actions(
+                work_order.status, blocked=snapshot.blocked_from is not None
+            ),
+            "decisions": [decision.to_dict() for decision in decisions],
+            "plan_id": snapshot.plan_id,
+            "plan_sha256": snapshot.plan_sha256,
+        }
+
+    def list_pending_actions(
+        self, work_order_id: str | None = None, *, actor: str | None = None
+    ) -> list[dict[str, Any]]:
+        if actor is not None:
+            self._actor(actor)
+        if work_order_id is not None:
+            projection = self.get_work_order(work_order_id, actor=actor)
+            return [
+                {**item, "work_order_id": work_order_id, "status": projection["status"]}
+                for item in projection["pending_actions"]
+            ]
+        return []
+
+    def submit_response(
+        self,
+        *,
+        markdown: str,
+        actor: str | None = None,
+        expected_version: int | None = None,
+    ) -> dict[str, Any]:
+        resolved = self._actor(actor)
+        try:
+            packet = parse_response_markdown(markdown)
+        except (ResponsePacketError, ValueError) as exc:
+            raise WorkOrderValidationError(str(exc)) from exc
+        if packet.authority != RESPONSE_AUTHORITY:
+            raise WorkOrderValidationError("Responses may only carry report_only authority.")
+        work_order = self._require_work_order(packet.work_order_id)
+        self._validate_evidence(work_order, packet, resolved)
+        try:
+            with self.store.lock_work_order(packet.work_order_id) as session:
+                snapshot = self._snapshot_from_session(session, work_order)
+                decisions = tuple(StoredDecision.from_dict(item) for item in session.list_decisions())
+                existing = session.get_response_by_idempotency(
+                    resolved, packet.response_type.value, packet.idempotency_key
+                )
+                digest = packet.content_sha256 or fingerprint_packet(packet)
+                message_id = packet.message_id or digest
+                if existing is not None:
+                    if existing["content_sha256"] != digest:
+                        raise IdempotencyConflict(
+                            "The idempotency key is already bound to a different canonical packet."
+                        )
+                    current = session.get_work_order()
+                    return {
+                        "receipt_type": "response.accepted",
+                        "work_order_id": current.work_order_id,
+                        "response_type": packet.response_type.value,
+                        "content_sha256": existing["content_sha256"],
+                        "status": current.status.value,
+                        "duplicate": True,
+                        "cache_key": response_idempotency_cache_key(
+                            actor=resolved,
+                            operation=packet.response_type.value,
+                            idempotency_key=packet.idempotency_key,
+                            packet_fingerprint=digest,
+                        ),
+                    }
+                result = apply_response(
+                    status=session.get_work_order().status,
+                    snapshot=snapshot,
+                    packet=packet,
+                    actor=resolved,
+                    decisions=decisions,
+                    expected_version=expected_version,
+                )
+                session.put_response_packet(
+                    {
+                        "packet_id": message_id,
+                        "response_type": packet.response_type.value,
+                        "actor": resolved,
+                        "idempotency_key": packet.idempotency_key,
+                        "content_sha256": digest,
+                        "in_reply_to": packet.in_reply_to,
+                        "source_input_sha256": packet.source_input_sha256,
+                        "created_at": packet.created_at,
+                        "packet": packet.to_dict(),
+                    }
+                )
+                session.update_status(result.status)
+                entry = session.append_ledger(
+                    event_type=result.ledger_event,
+                    actor=resolved,
+                    counterparty="broker:awr",
+                    payload={
+                        "message_id": message_id,
+                        "content_sha256": digest,
+                        "response_type": packet.response_type.value,
+                    },
+                )
+                session.put_lifecycle(
+                    {
+                        **result.snapshot.to_dict(),
+                        "current_parent_id": message_id,
+                    }
+                )
+                return {
+                    "receipt_type": "response.accepted",
+                    "work_order_id": packet.work_order_id,
+                    "response_type": packet.response_type.value,
+                    "content_sha256": digest,
+                    "message_id": message_id,
+                    "status": result.status.value,
+                    "duplicate": False,
+                    "ledger_sequence": entry.sequence,
+                    "cache_key": response_idempotency_cache_key(
+                        actor=resolved,
+                        operation=packet.response_type.value,
+                        idempotency_key=packet.idempotency_key,
+                        packet_fingerprint=digest,
+                    ),
+                }
+        except LifecycleError as exc:
+            raise WorkOrderValidationError(str(exc)) from exc
+
+    def record_decision(
+        self,
+        *,
+        decision_type: str,
+        work_order_id: str,
+        actor: str | None = None,
+        target_id: str,
+        target_sha256: str,
+        idempotency_key: str,
+        permitted_action: str,
+        scope: str = "restricted",
+        target_kind: str = "plan",
+        expected_version: int | None = None,
+    ) -> dict[str, Any]:
+        resolved = self._actor(actor)
+        try:
+            stored_type = DecisionType(decision_type)
+            event = {
+                DecisionType.APPROVE_PLAN: LifecycleEvent.APPROVE_PLAN,
+                DecisionType.REJECT_PLAN: LifecycleEvent.REJECT_PLAN,
+                DecisionType.ACCEPT_COMPLETION: LifecycleEvent.ACCEPT_COMPLETION,
+                DecisionType.REQUEST_REVISION: LifecycleEvent.REQUEST_REVISION,
+                DecisionType.CANCEL: LifecycleEvent.CANCEL,
+            }[stored_type]
+        except (ValueError, KeyError) as exc:
+            raise WorkOrderValidationError(
+                "request_plan_approval is not a stored decision."
+                if decision_type == "request_plan_approval"
+                else f"Unknown decision type: {decision_type}."
+            ) from exc
+        work_order = self._require_work_order(work_order_id)
+        decision = StoredDecision(
+            decision_id=f"DEC-{uuid4()}",
+            decision_type=stored_type,
+            work_order_id=work_order_id,
+            actor=resolved,
+            target_kind=DecisionTargetKind(target_kind),
+            target_id=target_id,
+            target_sha256=target_sha256.removeprefix("sha256:"),
+            permitted_action=permitted_action,
+            scope=scope,
+            created_at=datetime.now(UTC).isoformat(),
+            idempotency_key=idempotency_key,
+        )
+        try:
+            with self.store.lock_work_order(work_order_id) as session:
+                existing = next(
+                    (
+                        item
+                        for item in session.list_decisions()
+                        if item["actor"] == resolved
+                        and item["decision_type"] == stored_type.value
+                        and item["idempotency_key"] == idempotency_key
+                    ),
+                    None,
+                )
+                if existing is not None:
+                    if (
+                        existing["target_id"] != decision.target_id
+                        or existing["target_sha256"].removeprefix("sha256:")
+                        != decision.target_sha256
+                    ):
+                        raise IdempotencyConflict(
+                            "The idempotency key is already bound to a different decision."
+                        )
+                    current = session.get_work_order()
+                    return {
+                        "receipt_type": "decision.recorded",
+                        "work_order_id": work_order_id,
+                        "decision_id": existing["decision_id"],
+                        "decision_type": stored_type.value,
+                        "status": current.status.value,
+                        "duplicate": True,
+                    }
+                snapshot = self._snapshot_from_session(session, work_order)
+                result = apply_decision(
+                    status=session.get_work_order().status,
+                    snapshot=snapshot,
+                    event=event,
+                    decision=decision,
+                    expected_version=expected_version,
+                )
+                session.put_decision(decision.to_dict())
+                session.update_status(result.status)
+                entry = session.append_ledger(
+                    event_type=result.ledger_event,
+                    actor=resolved,
+                    counterparty="broker:awr",
+                    payload=decision.to_dict(),
+                )
+                session.put_lifecycle(result.snapshot.to_dict())
+                return {
+                    "receipt_type": "decision.recorded",
+                    "work_order_id": work_order_id,
+                    "decision_id": decision.decision_id,
+                    "decision_type": stored_type.value,
+                    "status": result.status.value,
+                    "ledger_sequence": entry.sequence,
+                }
+        except LifecycleError as exc:
+            raise WorkOrderValidationError(str(exc)) from exc
+
+    def request_plan_approval(self, work_order_id: str, *, actor: str | None = None) -> dict[str, Any]:
+        return self._apply_broker(
+            work_order_id,
+            LifecycleEvent.PLAN_APPROVAL_REQUESTED,
+            actor=actor,
+            message_id=f"APR-{uuid4()}",
+        )
+
+    def dispatch_execution(
+        self,
+        work_order_id: str,
+        *,
+        actor: str | None = None,
+        plan_id: str | None = None,
+        plan_sha256: str | None = None,
+        expected_version: int | None = None,
+    ) -> dict[str, Any]:
+        return self._apply_broker(
+            work_order_id,
+            LifecycleEvent.PLAN_EXECUTE,
+            actor=actor,
+            message_id=f"EXD-{uuid4()}",
+            plan_id=plan_id,
+            plan_sha256=plan_sha256,
+            expected_version=expected_version,
+        )
+
+    def request_completion_review(
+        self, work_order_id: str, *, actor: str | None = None
+    ) -> dict[str, Any]:
+        return self._apply_broker(
+            work_order_id,
+            LifecycleEvent.COMPLETION_REVIEW,
+            actor=actor,
+            message_id=f"CRV-{uuid4()}",
+        )
+
+    def answer_question(self, work_order_id: str, *, actor: str | None = None) -> dict[str, Any]:
+        return self._apply_broker(
+            work_order_id,
+            LifecycleEvent.QUESTION_ANSWER,
+            actor=actor,
+            message_id=f"ANS-{uuid4()}",
+        )
+
+    def refine_implementation(
+        self,
+        work_order_id: str,
+        *,
+        actor: str | None = None,
+        plan_id: str | None = None,
+        plan_sha256: str | None = None,
+    ) -> dict[str, Any]:
+        return self._apply_broker(
+            work_order_id,
+            LifecycleEvent.IMPLEMENTATION_REFINE,
+            actor=actor,
+            message_id=f"REF-{uuid4()}",
+            plan_id=plan_id,
+            plan_sha256=plan_sha256,
+        )
+
+    def _apply_broker(
+        self,
+        work_order_id: str,
+        event: LifecycleEvent,
+        *,
+        actor: str | None,
+        message_id: str,
+        plan_id: str | None = None,
+        plan_sha256: str | None = None,
+        expected_version: int | None = None,
+    ) -> dict[str, Any]:
+        resolved = self._actor(actor)
+        work_order = self._require_work_order(work_order_id)
+        try:
+            with self.store.lock_work_order(work_order_id) as session:
+                snapshot = self._snapshot_from_session(session, work_order)
+                decisions = tuple(StoredDecision.from_dict(item) for item in session.list_decisions())
+                result = apply_broker_event(
+                    status=session.get_work_order().status,
+                    snapshot=snapshot,
+                    event=event,
+                    actor=resolved,
+                    message_id=message_id,
+                    decisions=decisions,
+                    expected_version=expected_version,
+                    plan_id=plan_id,
+                    plan_sha256=plan_sha256.removeprefix("sha256:") if plan_sha256 else None,
+                )
+                session.update_status(result.status)
+                entry = session.append_ledger(
+                    event_type=result.ledger_event,
+                    actor=resolved,
+                    counterparty="broker:awr",
+                    payload={"message_id": message_id},
+                )
+                session.put_lifecycle(result.snapshot.to_dict())
+                return {
+                    "receipt_type": event.value,
+                    "work_order_id": work_order_id,
+                    "status": result.status.value,
+                    "ledger_sequence": entry.sequence,
+                    "message_id": message_id,
+                }
+        except LifecycleError as exc:
+            raise WorkOrderValidationError(str(exc)) from exc
+
+    def _snapshot_from_session(
+        self, session: WorkOrderSession, work_order: WorkOrder
+    ) -> LifecycleSnapshot:
+        raw = session.get_lifecycle()
+        if raw is not None:
+            return LifecycleSnapshot.from_dict(raw)
+        return derive_snapshot(
+            work_order.work_order_id,
+            work_order.sender,
+            work_order.recipient,
+            work_order.content_sha256,
+        )
+
+    def _validate_evidence(
+        self, work_order: WorkOrder, packet: ResponsePacket, actor: str
+    ) -> None:
+        if not packet.evidence_refs:
+            return
+        artifacts = self._require_artifacts()
+        for reference in packet.evidence_refs:
+            current = artifacts.metadata.get(reference.artifact_id)
+            if current is None:
+                raise WorkOrderValidationError(f"Unknown evidence artifact: {reference.artifact_id}")
+            if current.status is not ArtifactStatus.CLEAN:
+                raise WorkOrderValidationError("Evidence artifacts must be CLEAN.")
+            if current.owner not in {work_order.sender, actor}:
+                raise WorkOrderValidationError("Evidence artifact owner does not match the work order.")
+            if current.sha256 and current.sha256 != reference.sha256:
+                raise WorkOrderValidationError("Evidence artifact fingerprint does not match.")
 
     def _require_artifacts(self) -> ArtifactRelay:
         if self.artifacts is None:

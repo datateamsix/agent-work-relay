@@ -106,4 +106,41 @@ def create_app(service: BrokerService) -> Any:
         )
         return receipt.to_dict()
 
+    @app.post("/v1/responses")
+    def submit_response(payload: dict[str, Any]) -> Any:
+        try:
+            return service.submit_response(
+                markdown=str(payload["markdown"]),
+                actor=payload.get("sender"),
+                expected_version=payload.get("expected_version"),
+            )
+        except WorkOrderValidationError as exc:
+            return JSONResponse({"error": str(exc)}, status_code=400)
+
+    @app.post("/v1/decisions")
+    def record_decision(payload: dict[str, Any]) -> Any:
+        try:
+            return service.record_decision(
+                decision_type=str(payload["decision_type"]),
+                work_order_id=str(payload["work_order_id"]),
+                actor=payload.get("sender"),
+                target_id=str(payload["target_id"]),
+                target_sha256=str(payload["target_sha256"]),
+                idempotency_key=str(payload["idempotency_key"]),
+                permitted_action=str(payload["permitted_action"]),
+                scope=str(payload.get("scope") or "restricted"),
+                target_kind=str(payload.get("target_kind") or "plan"),
+                expected_version=payload.get("expected_version"),
+            )
+        except WorkOrderValidationError as exc:
+            return JSONResponse({"error": str(exc)}, status_code=400)
+
+    @app.get("/v1/work-orders/{work_order_id}")
+    def get_work_order(work_order_id: str) -> dict[str, Any]:
+        return service.get_work_order(work_order_id)
+
+    @app.get("/v1/work-orders/{work_order_id}/pending")
+    def list_pending(work_order_id: str) -> list[dict[str, Any]]:
+        return service.list_pending_actions(work_order_id)
+
     return app

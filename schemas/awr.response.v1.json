@@ -1,0 +1,73 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-work-relay.dev/schemas/awr.response.v1.json",
+  "title": "awr.response/v1",
+  "description": "Canonical AWR-AS-03 response packet. Responses never grant authority.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "response_type",
+    "work_order_id",
+    "in_reply_to",
+    "idempotency_key",
+    "source_input_sha256",
+    "created_at",
+    "authority",
+    "payload"
+  ],
+  "properties": {
+    "schema": { "const": "awr.response/v1" },
+    "response_type": {
+      "enum": [
+        "receipt.accepted",
+        "plan.completed",
+        "question.blocked",
+        "execution.acknowledged",
+        "execution.progress",
+        "execution.completed",
+        "execution.failed",
+        "review.completed"
+      ]
+    },
+    "work_order_id": { "type": "string", "minLength": 1 },
+    "in_reply_to": { "type": "string", "minLength": 1 },
+    "idempotency_key": { "type": "string", "minLength": 1 },
+    "source_input_sha256": { "type": "string", "pattern": "^(sha256:)?[0-9a-f]{64}$" },
+    "created_at": { "type": "string", "minLength": 1 },
+    "authority": { "const": "report_only" },
+    "payload": { "type": "object" },
+    "evidence_refs": {
+      "type": "array",
+      "maxItems": 10,
+      "items": { "$ref": "#/$defs/artifact_reference" }
+    },
+    "message_id": { "type": "string" },
+    "correlation_id": { "type": "string" },
+    "executor_run_id": { "type": "string" },
+    "actor": { "type": "string" },
+    "content_sha256": { "type": "string", "pattern": "^(sha256:)?[0-9a-f]{64}$" }
+  },
+  "$defs": {
+    "artifact_reference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["artifact_id", "purpose", "byte_length", "sha256", "safe_filename"],
+      "properties": {
+        "artifact_id": { "type": "string" },
+        "purpose": {
+          "enum": [
+            "design_reference",
+            "data_contract",
+            "requirements_reference",
+            "other_reference"
+          ]
+        },
+        "byte_length": { "type": "integer", "minimum": 0 },
+        "sha256": { "type": "string", "pattern": "^(sha256:)?[0-9a-f]{64}$" },
+        "detected_media_type": { "type": "string" },
+        "safe_filename": { "type": "string" }
+      }
+    }
+  }
+}

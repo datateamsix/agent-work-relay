@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from typing import Any
 
 from ..artifacts.contracts import ArtifactPurpose, ArtifactReference
@@ -137,10 +138,7 @@ def parse_response_markdown(markdown: str) -> ResponsePacket:
         raise DirectiveError("An @response document must close YAML frontmatter.")
     mapping = _parse_awr_block("\n".join(lines[open_index + 1 : close_index]))
     body = "\n".join(lines[close_index + 1 :]).strip("\n")
-    if body and "content" not in mapping:
-        title = mapping.get("title")
-        prefix = f"# {title}\n\n" if title else ""
-        mapping["content"] = body[len(prefix) :] if title and body.startswith(prefix) else body
+    _assign_markdown_body(mapping, body)
     payload_keys = set(mapping) - {
         "schema",
         "response_type",
@@ -155,8 +153,11 @@ def parse_response_markdown(markdown: str) -> ResponsePacket:
         "executor_run_id",
         "actor",
         "content_sha256",
+        "evidence_refs",
     }
     packet: dict[str, Any] = {key: mapping[key] for key in mapping if key not in payload_keys}
+    if "evidence_refs" in packet:
+        packet["evidence_refs"] = _parse_markdown_evidence(packet["evidence_refs"])
     payload = {key: mapping[key] for key in payload_keys}
     if "body_sha256" in payload:
         payload["content_sha256"] = payload.pop("body_sha256")
@@ -342,6 +343,54 @@ def _digest(value: object, name: str) -> str:
     if len(digest) != 64 or any(char not in "0123456789abcdef" for char in digest):
         raise ResponsePacketError(f"{name} must be a SHA-256 hex digest.")
     return digest
+
+
+def _parse_markdown_evidence(value: object) -> list[Any]:
+    if isinstance(value, list):
+        return value
+    if not isinstance(value, str) or not value:
+        raise ResponsePacketError("evidence_refs must be a list.")
+    try:
+        loaded = json.loads(value)
+    except json.JSONDecodeError as exc:
+        raise ResponsePacketError("evidence_refs must be a JSON array.") from exc
+    if not isinstance(loaded, list):
+        raise ResponsePacketError("evidence_refs must be a list.")
+    return loaded
+
+
+def _assign_markdown_body(mapping: dict[str, Any], body: str) -> None:
+    """Map the prose body onto the AS-03 payload field for that response type.
+
+    Rendered packets keep long text in the Markdown body. Types that do not
+    carry a body field ignore leftover prose so optional headings do not become
+    unknown payload keys.
+    """
+    if not body:
+        return
+    response_type = str(mapping.get("response_type") or "")
+    title = mapping.get("title")
+    prefix = f"# {title}\n\n" if isinstance(title, str) and title else ""
+    text = body[len(prefix) :] if prefix and body.startswith(prefix) else body
+    headings = {
+        "plan.completed": ("content", None),
+        "execution.completed": ("summary", "# Execution completed\n\n"),
+        "execution.progress": ("message", "# Execution progress\n\n"),
+        "execution.failed": ("message", "# Execution failed\n\n"),
+        "review.completed": (
+            "rationale",
+            f"# Review {mapping['outcome']}\n\n" if mapping.get("outcome") else None,
+        ),
+    }
+    target = headings.get(response_type)
+    if target is None:
+        return
+    field, heading = target
+    if field in mapping:
+        return
+    if heading and text.startswith(heading):
+        text = text[len(heading) :]
+    mapping[field] = text
 
 
 def _parse_awr_block(text: str) -> dict[str, str]:
